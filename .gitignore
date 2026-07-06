@@ -1,0 +1,38 @@
+# === 저장소 루트 gitignore (React Three Fiber + Vite 프로젝트) ===
+# 하위 worship-lighting-sim/.gitignore 가 node_modules·dist 등 앱 아티팩트를 처리한다.
+# 여기서는 저장소 전역(툴링/에디터/OS) 항목을 관리한다.
+
+# 의존성 / 빌드 산출물 (하위 경로 방어용)
+node_modules/
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+
+# 로그
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# 환경 변수
+.env
+.env.*
+!.env.example
+
+# 에디터 / 도구 설정
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.claude/
+
+# OS 생성 파일
+.DS_Store
+Thumbs.db
+*.suo
+*.sw?
+
+# Word 임시 파일
+~$*.docx
