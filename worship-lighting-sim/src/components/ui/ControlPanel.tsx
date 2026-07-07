@@ -2,7 +2,9 @@
 // 선택된 픽스처 전체에 On/Off·밝기·각도·색을 적용한다.
 // 표시 값은 대표(앵커) 픽스처 기준, 컨트롤 노출은 선택 전체의 공통 속성만.
 
-import { useSceneStore } from "../../store/scene-store";
+import { useEffect, useState } from "react";
+import * as THREE from "three";
+import { useSceneStore, type Vec3 } from "../../store/scene-store";
 
 function Slider({
   label,
@@ -47,6 +49,118 @@ function Slider({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         style={{ width: "100%", accentColor: "#4A90D9" }}
       />
+    </div>
+  );
+}
+
+/** 텍스트 입력용 숫자 필드 — 편집 중엔 타이핑한 문자열을 그대로 유지하고,
+ * blur/Enter에서만 파싱해 커밋한다. 편집 중이 아닐 때만 외부 값(스토어)과 동기화. */
+function AxisNumberInput({
+  value,
+  onCommit,
+}: {
+  value: number;
+  onCommit: (v: number) => void;
+}) {
+  const [text, setText] = useState(() => value.toFixed(2));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(value.toFixed(2));
+  }, [value, focused]);
+
+  const commit = () => {
+    const v = parseFloat(text);
+    if (Number.isFinite(v)) onCommit(v);
+    else setText(value.toFixed(2));
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocused(false);
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setText(value.toFixed(2));
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      style={{
+        width: "100%",
+        boxSizing: "border-box",
+        background: "#12121f",
+        border: "1px solid #333350",
+        borderRadius: 4,
+        color: "#E0E0E0",
+        fontFamily: "monospace",
+        fontSize: 12,
+        padding: "4px 2px",
+        textAlign: "center",
+      }}
+    />
+  );
+}
+
+const AXIS_LABELS = ["X", "Y", "Z"] as const;
+const r2d = THREE.MathUtils.radToDeg;
+const d2r = THREE.MathUtils.degToRad;
+
+/** Position/Rotation/Scale 한 줄 — 축 3개(X/Y/Z) 숫자 입력. rotation은 도 단위로 표시하고
+ * 내부적으로 라디안으로 변환해 저장한다. */
+function TransformRow({
+  label,
+  selectedIds,
+  values,
+  prop,
+  toDisplay = (v: number) => v,
+  fromDisplay = (v: number) => v,
+}: {
+  label: string;
+  selectedIds: string[];
+  values: Vec3;
+  prop: "position" | "rotation" | "scale";
+  toDisplay?: (v: number) => number;
+  fromDisplay?: (v: number) => number;
+}) {
+  const setAxisValue = useSceneStore((s) => s.setAxisValue);
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 11, color: "#7a7a9a", marginBottom: 4 }}>{label}</div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {AXIS_LABELS.map((axisLabel, axis) => (
+          <div key={axis} style={{ flex: 1 }}>
+            <div
+              style={{
+                fontSize: 9,
+                color: "#555570",
+                textAlign: "center",
+                marginBottom: 1,
+              }}
+            >
+              {axisLabel}
+            </div>
+            <AxisNumberInput
+              value={toDisplay(values[axis])}
+              onCommit={(v) =>
+                setAxisValue(
+                  selectedIds,
+                  prop,
+                  axis as 0 | 1 | 2,
+                  fromDisplay(v),
+                )
+              }
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -241,12 +355,46 @@ export function ControlPanel() {
       )}
 
       {isSurface && (
-        <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 10 }}>
           벽/바닥은 목록에서 선택 후 기즈모로
           <br />
           이동(1)·회전(2)·크기(3) 조절합니다.
         </div>
       )}
+
+      {/* Position/Rotation/Scale — 기즈모(1/2/3)와 동일한 값을 숫자로 직접 입력/수정 */}
+      <div
+        style={{
+          marginTop: 4,
+          marginBottom: 14,
+          paddingTop: 12,
+          borderTop: "1px solid #2a2a40",
+        }}
+      >
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#4A90D9", marginBottom: 10 }}>
+          트랜스폼 (Transform)
+        </div>
+        <TransformRow
+          label="Position (m)"
+          selectedIds={selectedIds}
+          values={primary.position}
+          prop="position"
+        />
+        <TransformRow
+          label="Rotation (°)"
+          selectedIds={selectedIds}
+          values={primary.rotation}
+          prop="rotation"
+          toDisplay={r2d}
+          fromDisplay={d2r}
+        />
+        <TransformRow
+          label="Scale"
+          selectedIds={selectedIds}
+          values={primary.scale}
+          prop="scale"
+        />
+      </div>
 
       {/* 선택 삭제 */}
       <button

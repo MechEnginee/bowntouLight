@@ -61,6 +61,13 @@ interface SceneState extends Snapshot {
   rotateBy: (ids: string[], dq: [number, number, number, number]) => void;
   /** 축별 배율을 곱한다 */
   scaleBy: (ids: string[], factor: Vec3) => void;
+  /** 우측 패널 숫자 입력 — position/rotation/scale의 한 축을 절대값으로 설정 */
+  setAxisValue: (
+    ids: string[],
+    prop: "position" | "rotation" | "scale",
+    axis: 0 | 1 | 2,
+    value: number,
+  ) => void;
   update: (ids: string[], changes: Partial<Editable>) => void;
 
   // 오브젝트 관리
@@ -288,6 +295,20 @@ export const useSceneStore = create<SceneState>()((set) => ({
             clampScale(sc[2] * factor[2]),
           ],
         });
+      }
+      return { ...hist, fixtures: fx };
+    }),
+
+  setAxisValue: (ids, prop, axis, value) =>
+    set((s) => {
+      const hist = record(s, `axis:${prop}:${axis}:${ids.join(",")}`);
+      let fx = s.fixtures;
+      for (const id of ids) {
+        const f = fx[id];
+        if (!f) continue;
+        const arr = [...f[prop]] as Vec3;
+        arr[axis] = prop === "scale" ? clampScale(value) : value;
+        fx = patch(fx, id, { [prop]: arr } as Partial<FixtureRuntime>);
       }
       return { ...hist, fixtures: fx };
     }),
