@@ -8,7 +8,7 @@
 
 import { useSceneStore } from "../../store/scene-store";
 import { MovingHead } from "./MovingHead";
-import { ParLight } from "./ParLight";
+import { MiniBeam } from "./MiniBeam";
 import { StrobeLight } from "./StrobeLight";
 import { Hazer } from "./Hazer";
 
@@ -29,14 +29,25 @@ export function MovableFixture({ id }: { id: string }) {
           pan={f.pan}
           tilt={f.tilt}
           angle={f.angle}
+          position={f.position}
         />
       );
       break;
     case "par":
-      visual = <ParLight on={f.on} dimmer={f.dimmer} color={f.color} />;
+      visual = (
+        <MiniBeam
+          on={f.on}
+          dimmer={f.dimmer}
+          color={f.color}
+          pan={f.pan}
+          tilt={f.tilt}
+          angle={f.angle}
+          position={f.position}
+        />
+      );
       break;
     case "strobe":
-      visual = <StrobeLight on={f.on} dimmer={f.dimmer} />;
+      visual = <StrobeLight on={f.on} dimmer={f.dimmer} rate={f.strobeRate} />;
       break;
     case "hazer":
       visual = <Hazer on={f.on} />;

@@ -18,12 +18,13 @@ export interface FixtureRuntime {
   color: string; // #rrggbb
   pan: number; // 0..540 도
   tilt: number; // 0..270 도
-  angle: number; // 빔 콘 각도(도)
+  angle: number; // 빔 전체각(도) — movingHead 5..60, par(미니빔) 1..12
+  strobeRate: number; // 스트로브 플래시 속도(Hz), 0 = 상시 점등
 }
 
 type Editable = Pick<
   FixtureRuntime,
-  "on" | "dimmer" | "color" | "pan" | "tilt" | "angle"
+  "on" | "dimmer" | "color" | "pan" | "tilt" | "angle" | "strobeRate"
 >;
 
 interface SceneState {
@@ -58,7 +59,9 @@ const initialFixtures: Record<string, FixtureRuntime> = Object.fromEntries(
       color: "#ffffff",
       pan: 270,
       tilt: 135,
-      angle: 25,
+      // 미니빔(par)은 좁은 펜슬 빔, 워시 무빙은 중간 줌이 기본
+      angle: c.type === "par" ? 4 : 25,
+      strobeRate: 8,
     } satisfies FixtureRuntime,
   ]),
 );

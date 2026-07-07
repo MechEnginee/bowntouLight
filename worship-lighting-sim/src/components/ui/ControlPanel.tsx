@@ -91,13 +91,21 @@ export function ControlPanel() {
   const primary =
     (anchorId && selected.find((f) => f.id === anchorId)) || selected[0];
 
-  const isMoving = selected.every((f) => f.type === "movingHead");
-  const hasColor = selected.every(
+  // 미니빔(par)도 실기(LED Mini Beam 251)처럼 Pan/Tilt/줌을 가진 무빙 픽스처다
+  const hasBeam = selected.every(
     (f) => f.type === "movingHead" || f.type === "par",
   );
+  const allPar = selected.every((f) => f.type === "par");
+  const allMoving = selected.every((f) => f.type === "movingHead");
+  const isStrobe = selected.every((f) => f.type === "strobe");
+  const hasColor = hasBeam;
   const hasDimmer = selected.every((f) => f.type !== "hazer");
   const allOn = selected.every((f) => f.on);
   const multi = selected.length > 1;
+
+  // 타입별 빔각 범위: 미니빔 1~12°(펜슬 빔) / 워시 무빙 5~60° / 혼합 1~60°
+  const angleMin = allPar ? 1 : allMoving ? 5 : 1;
+  const angleMax = allPar ? 12 : allMoving ? 60 : 60;
 
   return (
     <aside style={panelStyle}>
@@ -143,7 +151,7 @@ export function ControlPanel() {
         />
       )}
 
-      {isMoving && (
+      {hasBeam && (
         <>
           <Slider
             label="Pan (좌우)"
@@ -162,13 +170,34 @@ export function ControlPanel() {
             onChange={(v) => update(selectedIds, { tilt: v })}
           />
           <Slider
-            label="빔 각도 (Beam)"
+            label="빔 폭 (Zoom)"
             value={primary.angle}
-            min={5}
-            max={60}
+            min={angleMin}
+            max={angleMax}
+            step={0.5}
             suffix="°"
             onChange={(v) => update(selectedIds, { angle: v })}
           />
+          <div style={{ fontSize: 11, color: "#666", marginTop: -8, marginBottom: 12 }}>
+            빔이 넓어질수록 빛의 세기는 약해집니다
+          </div>
+        </>
+      )}
+
+      {isStrobe && (
+        <>
+          <Slider
+            label="플래시 속도 (Rate)"
+            value={primary.strobeRate}
+            min={0}
+            max={20}
+            step={0.5}
+            suffix="Hz"
+            onChange={(v) => update(selectedIds, { strobeRate: v })}
+          />
+          <div style={{ fontSize: 11, color: "#666", marginTop: -8, marginBottom: 12 }}>
+            0 Hz = 상시 점등
+          </div>
         </>
       )}
 
