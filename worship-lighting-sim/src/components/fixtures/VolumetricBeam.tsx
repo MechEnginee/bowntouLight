@@ -1,7 +1,7 @@
 // components/fixtures/VolumetricBeam.tsx
 // 무빙/미니빔 공용 볼류메트릭 빔(레이 1가닥).
 //  - 잘린 원뿔(truncated cone) + additive 셰이더: 렌즈에서 멀어질수록·가장자리로 갈수록 페이드
-//  - 바닥(y=0)·뒷벽(z=-4)과의 교차를 계산해 빔 길이를 결정하고, 맞은 표면에 타원 스팟을 그린다
+//  - 스토어의 반사 표면(벽/바닥) 목록과 교차를 계산해 빔 길이를 정하고, 맞은 표면에 타원 스팟을 그린다
 //  - 에너지 보존: 빔각(energyAngle)이 넓어지면 같은 광량이 퍼지므로 밝기가 줄어든다
 // 이 컴포넌트는 헤드의 tilt 그룹 안(로컬 -Y가 빔 방향)에 배치하는 것을 전제로 한다.
 // 워시처럼 여러 갈래로 갈라지는 픽스처는 lensLocal(렌즈 위치) + rayQuat(갈래 방향)을
@@ -9,14 +9,17 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { useShallow } from "zustand/react/shallow";
+import { useSceneStore, type Vec3 } from "../../store/scene-store";
+import { SURFACE_SIZE } from "../../config/fixtures.config";
 
 const d2r = THREE.MathUtils.degToRad;
 
 const MAX_LENGTH = 25;
-const FLOOR_Y = 0;
-const WALL_Z = -4;
 
 const IDENTITY_QUAT = new THREE.Quaternion();
+const V3_ZERO: Vec3 = [0, 0, 0];
+const V3_ONE: Vec3 = [1, 1, 1];
 
 /** 빔각(전체각)이 refAngle에서 벗어날 때의 밝기 배율 — 넓어지면 어두워진다 */
 function energyScale(angle: number, refAngle: number): number {
@@ -86,6 +89,10 @@ interface Props {
   refAngle: number;
   /** 픽스처 월드 좌표 (MovableFixture group의 position) */
   position: [number, number, number];
+  /** 픽스처 루트 회전 (Euler XYZ 라디안) — 기즈모 회전 반영 */
+  rootRotation?: Vec3;
+  /** 픽스처 루트 스케일 — 균등 스케일 가정 */
+  rootScale?: Vec3;
   pan: number; // 0..540, 270=중앙
   tilt: number; // 0..270, 135=중앙(수직 아래)
   /** 픽스처 원점 → tilt 피벗의 Y 오프셋 (예: -0.26) */
@@ -115,6 +122,8 @@ export function VolumetricBeam({
   energyAngle,
   refAngle,
   position,
+  rootRotation = V3_ZERO,
+  rootScale = V3_ONE,
   pan,
   tilt,
   headOffsetY,
@@ -175,37 +184,69 @@ export function VolumetricBeam({
   }, [beamMat, spotMat]);
 
   const [lx, ly, lz] = lensLocal;
+  const [rrx, rry, rrz] = rootRotation;
+  // 균등 스케일 가정 — 빔 방향/길이 계산은 평균 배율 하나로 처리
+  const rootS = Math.max(0.05, (rootScale[0] + rootScale[1] + rootScale[2]) / 3);
+
+  // 반사 표면(벽/바닥) 목록 — 표면이 이동/회전/크기 변경되면 빔 길이·스팟도 갱신
+  const surfaces = useSceneStore(
+    useShallow((s) =>
+      s.order
+        .map((id) => s.fixtures[id])
+        .filter((f) => f && (f.type === "wall" || f.type === "floor")),
+    ),
+  );
 
   // ─── 월드 공간에서 빔 길이·표면 교차 계산 (모든 입력이 스토어 값 → 렌더 시 순수 계산) ───
   const { length, endRadius, hit, spotQuat, spotScale, spotPos } = useMemo(() => {
     const half = d2r(angle / 2);
-    // 월드 방향 = pan/tilt 회전 ∘ 레이 로컬 회전 ∘ (0,-1,0)
+    // 월드 방향 = 루트 회전 ∘ pan/tilt 회전 ∘ 레이 로컬 회전 ∘ (0,-1,0)
+    const qRoot = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(rrx, rry, rrz),
+    );
     const qpt = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(d2r(tilt - 135), d2r(pan - 270), 0, "YXZ"),
     );
-    const qTotal = qpt.clone().multiply(rayQuat);
+    const qTotal = qRoot.clone().multiply(qpt).multiply(rayQuat);
     const dir = new THREE.Vector3(0, -1, 0).applyQuaternion(qTotal);
+    // 렌즈 월드 좌표 = 픽스처 위치 + 루트변환(스케일·회전 적용된 로컬 렌즈 오프셋)
     const origin = new THREE.Vector3(lx, ly, lz)
       .applyQuaternion(qpt)
-      .add(new THREE.Vector3(position[0], position[1] + headOffsetY, position[2]));
+      .add(new THREE.Vector3(0, headOffsetY, 0))
+      .multiplyScalar(rootS)
+      .applyQuaternion(qRoot)
+      .add(new THREE.Vector3(position[0], position[1], position[2]));
 
+    // 모든 반사 표면과 교차 검사 → 가장 가까운 유효 교차를 채택
     let L = MAX_LENGTH;
     let normal: THREE.Vector3 | null = null;
-    if (dir.y < -1e-4) {
-      const t = (FLOOR_Y - origin.y) / dir.y;
-      if (t > 0 && t < L) {
-        L = t;
-        normal = new THREE.Vector3(0, 1, 0);
-      }
+    for (const surf of surfaces) {
+      const qs = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(surf.rotation[0], surf.rotation[1], surf.rotation[2]),
+      );
+      const n = new THREE.Vector3(0, 0, 1).applyQuaternion(qs);
+      const denom = dir.dot(n);
+      if (Math.abs(denom) < 1e-4) continue;
+      const center = new THREE.Vector3(...surf.position);
+      const t = center.clone().sub(origin).dot(n) / denom;
+      if (t < 0.1 || t >= L) continue;
+      // 유한 사각형 안인지 로컬 좌표로 확인
+      const local = origin
+        .clone()
+        .addScaledVector(dir, t)
+        .sub(center)
+        .applyQuaternion(qs.clone().invert());
+      const [bw, bh] = SURFACE_SIZE[surf.type as "wall" | "floor"];
+      if (
+        Math.abs(local.x) > (bw / 2) * surf.scale[0] ||
+        Math.abs(local.y) > (bh / 2) * surf.scale[1]
+      )
+        continue;
+      L = t;
+      normal = denom < 0 ? n.clone() : n.clone().negate();
     }
-    if (dir.z < -1e-4) {
-      const t = (WALL_Z - origin.z) / dir.z;
-      if (t > 0 && t < L) {
-        L = t;
-        normal = new THREE.Vector3(0, 0, 1);
-      }
-    }
-    L = Math.max(L, 0.6);
+    // 렌더링은 픽스처 로컬 공간(루트 스케일 적용 전) 기준 길이로
+    L = Math.max(L / rootS, 0.6);
 
     const endRadius = lensRadius + Math.tan(half) * L;
 
@@ -235,7 +276,7 @@ export function VolumetricBeam({
     }
 
     return { length: L, endRadius, hit: !!normal, spotQuat, spotScale, spotPos };
-  }, [angle, pan, tilt, position, headOffsetY, lx, ly, lz, lensRadius, rayQuat]);
+  }, [angle, pan, tilt, position, headOffsetY, lx, ly, lz, lensRadius, rayQuat, rrx, rry, rrz, rootS, surfaces]);
 
   // ─── 밝기: 에너지 보존 — 넓게 퍼질수록 어두워진다 ───
   const energy = energyScale(energyAngle ?? angle, refAngle);

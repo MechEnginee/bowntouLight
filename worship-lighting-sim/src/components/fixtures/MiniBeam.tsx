@@ -13,8 +13,11 @@ interface Props {
   pan: number; // 0..540 도
   tilt: number; // 0..270 도
   angle: number; // 빔 전체각(도) 1..12
-  /** 픽스처 월드 좌표 — 빔의 바닥/벽 교차 계산용 */
+  /** 픽스처 월드 좌표 — 빔의 표면 교차 계산용 */
   position: [number, number, number];
+  /** 픽스처 루트 회전/스케일 (기즈모 변형) — 빔 월드 방향 보정용 */
+  rotation: [number, number, number];
+  scale: [number, number, number];
 }
 
 const d2r = THREE.MathUtils.degToRad;
@@ -26,7 +29,7 @@ const REF_ANGLE = 4; // 에너지 보존 기준각
 
 const bodyMat = { color: "#1c1c1f", metalness: 0.5, roughness: 0.5 };
 
-export function MiniBeam({ on, dimmer, color, pan, tilt, angle, position }: Props) {
+export function MiniBeam({ on, dimmer, color, pan, tilt, angle, position, rotation, scale }: Props) {
   return (
     <group>
       {/* 베이스 (트러스 고정부, 디스플레이 박스 포함) */}
@@ -80,6 +83,8 @@ export function MiniBeam({ on, dimmer, color, pan, tilt, angle, position }: Prop
             angle={angle}
             refAngle={REF_ANGLE}
             position={position}
+            rootRotation={rotation}
+            rootScale={scale}
             pan={pan}
             tilt={tilt}
             headOffsetY={HEAD_PIVOT_Y}
