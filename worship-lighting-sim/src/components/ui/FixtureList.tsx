@@ -6,9 +6,9 @@ import { useSceneStore } from "../../store/scene-store";
 import type { FixtureType } from "../../config/fixtures.config";
 
 const GROUP_LABEL: Record<FixtureType, string> = {
-  movingHead: "무빙 헤드 (GBR 4012)",
-  par: "파 라이트 (MiniBaem)",
-  strobe: "스트로브 (300W)",
+  movingHead: "무빙 워시 (LED Wash Moving)",
+  par: "미니빔 (LED Mini Beam 251)",
+  strobe: "스트로브 (LED Strobe)",
   hazer: "헤이저",
 };
 
