@@ -45,6 +45,10 @@ interface SceneState extends Snapshot {
   clipboard: FixtureRuntime[];
   past: Snapshot[];
   future: Snapshot[];
+  /** 씬 전역 환경광 밝기 (0=암전, 1=기본) — 좌상단 컨트롤로 조절 */
+  sceneBrightness: number;
+
+  setSceneBrightness: (v: number) => void;
 
   // 선택
   selectSingle: (id: string) => void;
@@ -61,6 +65,13 @@ interface SceneState extends Snapshot {
   rotateBy: (ids: string[], dq: [number, number, number, number]) => void;
   /** 축별 배율을 곱한다 */
   scaleBy: (ids: string[], factor: Vec3) => void;
+  /** 우측 패널 숫자 입력 — position/rotation/scale의 한 축을 절대값으로 설정 */
+  setAxisValue: (
+    ids: string[],
+    prop: "position" | "rotation" | "scale",
+    axis: 0 | 1 | 2,
+    value: number,
+  ) => void;
   update: (ids: string[], changes: Partial<Editable>) => void;
 
   // 오브젝트 관리
@@ -199,6 +210,10 @@ export const useSceneStore = create<SceneState>()((set) => ({
   clipboard: [],
   past: [],
   future: [],
+  sceneBrightness: 0.5,
+
+  setSceneBrightness: (v) =>
+    set({ sceneBrightness: Math.max(0, Math.min(2, v)) }),
 
   // ─── 선택 (히스토리 미기록) ───
   selectSingle: (id) => set({ selectedIds: [id], anchorId: id }),
@@ -288,6 +303,20 @@ export const useSceneStore = create<SceneState>()((set) => ({
             clampScale(sc[2] * factor[2]),
           ],
         });
+      }
+      return { ...hist, fixtures: fx };
+    }),
+
+  setAxisValue: (ids, prop, axis, value) =>
+    set((s) => {
+      const hist = record(s, `axis:${prop}:${axis}:${ids.join(",")}`);
+      let fx = s.fixtures;
+      for (const id of ids) {
+        const f = fx[id];
+        if (!f) continue;
+        const arr = [...f[prop]] as Vec3;
+        arr[axis] = prop === "scale" ? clampScale(value) : value;
+        fx = patch(fx, id, { [prop]: arr } as Partial<FixtureRuntime>);
       }
       return { ...hist, fixtures: fx };
     }),
