@@ -98,8 +98,20 @@ export function ControlPanel() {
   const allPar = selected.every((f) => f.type === "par");
   const allMoving = selected.every((f) => f.type === "movingHead");
   const isStrobe = selected.every((f) => f.type === "strobe");
-  const hasColor = hasBeam;
-  const hasDimmer = selected.every((f) => f.type !== "hazer");
+  const isSurface = selected.every(
+    (f) => f.type === "wall" || f.type === "floor",
+  );
+  // 벽/바닥은 표면색으로 color를 재사용
+  const hasColor = selected.every(
+    (f) =>
+      f.type === "movingHead" ||
+      f.type === "par" ||
+      f.type === "wall" ||
+      f.type === "floor",
+  );
+  const hasDimmer = selected.every(
+    (f) => f.type !== "hazer" && f.type !== "wall" && f.type !== "floor",
+  );
   const allOn = selected.every((f) => f.on);
   const multi = selected.length > 1;
 
@@ -121,24 +133,26 @@ export function ControlPanel() {
           : `${primary.mount} · (${primary.position.map((n) => n.toFixed(1)).join(", ")})`}
       </div>
 
-      {/* On/Off (선택 전체) */}
-      <button
-        onClick={() => update(selectedIds, { on: !allOn })}
-        style={{
-          width: "100%",
-          padding: "10px",
-          marginBottom: 16,
-          borderRadius: 6,
-          border: "none",
-          cursor: "pointer",
-          fontSize: 14,
-          fontWeight: 700,
-          background: allOn ? "#FF6B35" : "#333",
-          color: allOn ? "#fff" : "#aaa",
-        }}
-      >
-        {allOn ? "● 전체 ON" : "○ 전체 OFF"}
-      </button>
+      {/* On/Off (선택 전체) — 표면은 해당 없음 */}
+      {!isSurface && (
+        <button
+          onClick={() => update(selectedIds, { on: !allOn })}
+          style={{
+            width: "100%",
+            padding: "10px",
+            marginBottom: 16,
+            borderRadius: 6,
+            border: "none",
+            cursor: "pointer",
+            fontSize: 14,
+            fontWeight: 700,
+            background: allOn ? "#FF6B35" : "#333",
+            color: allOn ? "#fff" : "#aaa",
+          }}
+        >
+          {allOn ? "● 전체 ON" : "○ 전체 OFF"}
+        </button>
+      )}
 
       {hasDimmer && (
         <Slider
@@ -204,7 +218,7 @@ export function ControlPanel() {
       {hasColor && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 12, color: "#b0b0c0", marginBottom: 6 }}>
-            색상 (Color)
+            {isSurface ? "표면색 (Surface Color)" : "색상 (Color)"}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <input
@@ -225,6 +239,31 @@ export function ControlPanel() {
           </div>
         </div>
       )}
+
+      {isSurface && (
+        <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 14 }}>
+          벽/바닥은 목록에서 선택 후 기즈모로
+          <br />
+          이동(1)·회전(2)·크기(3) 조절합니다.
+        </div>
+      )}
+
+      {/* 선택 삭제 */}
+      <button
+        onClick={() => useSceneStore.getState().removeObjects(selectedIds)}
+        style={{
+          width: "100%",
+          padding: "8px",
+          borderRadius: 6,
+          border: "1px solid #663333",
+          cursor: "pointer",
+          fontSize: 13,
+          background: "#2a1a1a",
+          color: "#e08080",
+        }}
+      >
+        선택 삭제 (Delete)
+      </button>
     </aside>
   );
 }

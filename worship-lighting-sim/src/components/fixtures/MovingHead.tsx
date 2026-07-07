@@ -15,8 +15,11 @@ interface Props {
   pan: number; // 0..540 도
   tilt: number; // 0..270 도
   angle: number; // 빔 전체각(도) 5..60
-  /** 픽스처 월드 좌표 — 빔의 바닥/벽 교차 계산용 */
+  /** 픽스처 월드 좌표 — 빔의 표면 교차 계산용 */
   position: [number, number, number];
+  /** 픽스처 루트 회전/스케일 (기즈모 변형) — 빔 월드 방향 보정용 */
+  rotation: [number, number, number];
+  scale: [number, number, number];
 }
 
 const d2r = THREE.MathUtils.degToRad;
@@ -41,7 +44,7 @@ function lensPositions(): [number, number][] {
   return pts;
 }
 
-export function MovingHead({ on, dimmer, color, pan, tilt, angle, position }: Props) {
+export function MovingHead({ on, dimmer, color, pan, tilt, angle, position, rotation, scale }: Props) {
   const lenses = useMemo(lensPositions, []);
 
   // 각 렌즈의 레이 방향: 바깥 링일수록 줌 반각만큼 바깥쪽으로 기울인다 (부채꼴 퍼짐)
@@ -130,6 +133,8 @@ export function MovingHead({ on, dimmer, color, pan, tilt, angle, position }: Pr
               energyAngle={angle}
               refAngle={REF_ANGLE}
               position={position}
+              rootRotation={rotation}
+              rootScale={scale}
               pan={pan}
               tilt={tilt}
               headOffsetY={HEAD_PIVOT_Y}

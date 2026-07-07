@@ -10,9 +10,21 @@ const GROUP_LABEL: Record<FixtureType, string> = {
   par: "미니빔 (LED Mini Beam 251)",
   strobe: "스트로브 (LED Strobe)",
   hazer: "헤이저",
+  wall: "반사 벽 (Wall)",
+  floor: "반사 바닥 (Floor)",
 };
 
-const TYPE_ORDER: FixtureType[] = ["movingHead", "par", "strobe", "hazer"];
+const TYPE_ORDER: FixtureType[] = [
+  "movingHead",
+  "par",
+  "strobe",
+  "hazer",
+  "wall",
+  "floor",
+];
+
+/** 목록에서 바로 새 오브젝트를 추가할 수 있는 타입 */
+const ADDABLE: FixtureType[] = ["wall", "floor"];
 
 export function FixtureList() {
   const fixtures = useSceneStore((s) => s.fixtures);
@@ -54,11 +66,15 @@ export function FixtureList() {
 
       {TYPE_ORDER.map((t) => {
         const ids = idsByType(t);
-        if (ids.length === 0) return null;
+        const addable = ADDABLE.includes(t);
+        if (ids.length === 0 && !addable) return null;
         return (
           <div key={t} style={{ marginBottom: 14 }}>
             <div
               style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 fontSize: 11,
                 textTransform: "uppercase",
                 letterSpacing: 0.5,
@@ -66,7 +82,25 @@ export function FixtureList() {
                 marginBottom: 6,
               }}
             >
-              {GROUP_LABEL[t]}
+              <span>{GROUP_LABEL[t]}</span>
+              {addable && (
+                <button
+                  onClick={() => useSceneStore.getState().addObject(t)}
+                  title={`${GROUP_LABEL[t]} 추가`}
+                  style={{
+                    border: "1px solid #3a3a55",
+                    background: "#22223a",
+                    color: "#9ab8e0",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    lineHeight: 1,
+                    padding: "3px 7px",
+                    cursor: "pointer",
+                  }}
+                >
+                  + 추가
+                </button>
+              )}
             </div>
             {ids.map((id) => {
               const f = fixtures[id];

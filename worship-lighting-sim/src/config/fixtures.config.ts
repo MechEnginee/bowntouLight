@@ -3,18 +3,32 @@
 // baseAddress(DMX 시작 채널)는 다음 단계(F-05~) 대비로 미리 넣어두되,
 // 1차 마일스톤(정적 배치)에서는 아직 사용하지 않는다.
 
-export type FixtureType = "movingHead" | "par" | "strobe" | "hazer";
+export type FixtureType =
+  | "movingHead"
+  | "par"
+  | "strobe"
+  | "hazer"
+  | "wall"
+  | "floor";
 
 export interface FixtureConfig {
   id: string;
   type: FixtureType;
   /** 3D 월드 좌표 [x(좌우), y(높이), z(전후)] — 단위: meter */
   position: [number, number, number];
+  /** 초기 회전 (Euler XYZ, 라디안) — 생략 시 [0,0,0] */
+  rotation?: [number, number, number];
   /** DMX 시작 채널 (0-based). 다음 단계에서 useFrame 반영에 사용 */
   baseAddress: number;
   /** 마운트 위치 라벨 (문서 2.1절) */
   mount: string;
 }
+
+/** 표면(벽/바닥) 기본 크기 [가로, 세로] — 런타임 scale을 곱해 최종 크기 */
+export const SURFACE_SIZE: Record<"wall" | "floor", [number, number]> = {
+  wall: [20, 8],
+  floor: [20, 20],
+};
 
 /**
  * 좌표 규칙 (문서 2.1절)
@@ -104,9 +118,29 @@ const hazer: FixtureConfig = {
   mount: "무대 뒤 바닥",
 };
 
+// 반사 표면 (벽/바닥) — 빔이 닿아 스팟이 맺히는 대상이자 목록에서 관리되는 오브젝트
+const surfaces: FixtureConfig[] = [
+  {
+    id: "floor-1",
+    type: "floor",
+    position: [0, 0, 0],
+    rotation: [-Math.PI / 2, 0, 0],
+    baseAddress: -1,
+    mount: "무대 바닥",
+  },
+  {
+    id: "wall-1",
+    type: "wall",
+    position: [0, 4, -4],
+    baseAddress: -1,
+    mount: "무대 뒷벽",
+  },
+];
+
 export const FIXTURES_CONFIG: FixtureConfig[] = [
   ...movingHeads,
   ...parLights,
   ...strobes,
   hazer,
+  ...surfaces,
 ];

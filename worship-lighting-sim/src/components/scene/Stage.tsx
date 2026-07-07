@@ -1,8 +1,7 @@
 // components/scene/Stage.tsx
-// 무대 기본 환경: 바닥(Plane) + 뒷벽 + 프런트/백 트러스 2개(Box).
-// 문서 2.1절 좌표계 기준 — 트러스 높이/깊이를 픽스처 배치 높이와 맞춘다.
+// 무대 기본 환경: 프런트/백 트러스 2개(Box) + 기둥.
+// 바닥/뒷벽은 이제 스토어의 반사 표면 오브젝트(floor-1/wall-1)로 관리된다.
 
-const FLOOR_SIZE = 20;
 const STAGE_WIDTH = 10; // 트러스 가로 길이
 
 /** 가로로 뻗은 트러스 하나 (지정 높이/깊이) */
@@ -28,18 +27,6 @@ function TrussLeg({ x, z, height }: { x: number; z: number; height: number }) {
 export function Stage() {
   return (
     <group>
-      {/* 바닥 */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[FLOOR_SIZE, FLOOR_SIZE]} />
-        <meshStandardMaterial color="#151515" roughness={0.9} />
-      </mesh>
-
-      {/* 뒷벽 */}
-      <mesh position={[0, 4, -4]} receiveShadow>
-        <planeGeometry args={[FLOOR_SIZE, 8]} />
-        <meshStandardMaterial color="#0d0d12" roughness={1} />
-      </mesh>
-
       {/* 프런트 트러스 (Z=0, Moving 4.5 / Par 4.0 가 매달림) */}
       <Truss y={4.7} z={0} />
       <TrussLeg x={-STAGE_WIDTH / 2} z={0} height={4.7} />

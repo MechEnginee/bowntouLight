@@ -2,8 +2,10 @@
 // 카메라: 휠=줌 / 좌클릭=없음 / 우클릭 드래그=회전 / 휠클릭 드래그=팬.
 // 선택: 픽스처 클릭(Ctrl/Shift 지원) · 빈 공간 좌드래그=마퀴 박스 선택.
 // 좌측 목록 항목을 캔버스로 드래그&드롭하면 해당 픽스처를 그 지점으로 이동.
+// 단축키: 1/2/3=이동/회전/크기 기즈모 · Ctrl+C/V=복사/붙여넣기 · Delete=삭제
+//         Ctrl+Z=실행취소 · Ctrl+Shift+Z 또는 Ctrl+Y=다시실행
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import type { RootState } from "@react-three/fiber";
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
@@ -22,11 +24,59 @@ interface Rect {
   y1: number;
 }
 
+const MODE_LABEL = {
+  translate: "이동",
+  rotate: "회전",
+  scale: "크기",
+} as const;
+
 export default function App() {
+  const transformMode = useSceneStore((s) => s.transformMode);
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
   const [marquee, setMarquee] = useState<Rect | null>(null);
+
+  // ─── 전역 키보드 단축키 ───
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      // 입력 필드에서 타이핑 중이면 무시
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+        return;
+      }
+      const st = useSceneStore.getState();
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+
+      if (mod && key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) st.redo();
+        else st.undo();
+      } else if (mod && key === "y") {
+        e.preventDefault();
+        st.redo();
+      } else if (mod && key === "c") {
+        if (st.selectedIds.length > 0) {
+          e.preventDefault();
+          st.copySelection();
+        }
+      } else if (mod && key === "v") {
+        e.preventDefault();
+        st.paste();
+      } else if (e.key === "Delete") {
+        if (st.selectedIds.length > 0) st.removeObjects(st.selectedIds);
+      } else if (e.key === "1") {
+        st.setTransformMode("translate");
+      } else if (e.key === "2") {
+        st.setTransformMode("rotate");
+      } else if (e.key === "3") {
+        st.setTransformMode("scale");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // ─── 좌측 목록 → 캔버스 드롭: 화면 좌표를 픽스처 높이 평면에 투영해 XZ 이동 ───
   const handleDrop = (e: React.DragEvent) => {
@@ -239,6 +289,14 @@ export default function App() {
           휠=줌 · 우클릭=회전 · 휠클릭=이동
           <br />
           클릭/Ctrl/Shift=선택 · 빈곳 드래그=박스선택 · 우클릭=On
+          <br />
+          1/2/3=이동/회전/크기 · Ctrl+C/V=복사/붙여넣기 · Del=삭제
+          <br />
+          Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행
+          <br />
+          <span style={{ color: "#4A90D9" }}>
+            기즈모: {MODE_LABEL[transformMode]}
+          </span>
         </div>
       </div>
 
