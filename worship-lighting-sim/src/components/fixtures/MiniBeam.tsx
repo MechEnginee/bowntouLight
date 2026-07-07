@@ -83,7 +83,7 @@ export function MiniBeam({ on, dimmer, color, pan, tilt, angle, position }: Prop
             pan={pan}
             tilt={tilt}
             headOffsetY={HEAD_PIVOT_Y}
-            lensOffset={LENS_OFFSET}
+            lensLocal={[0, -LENS_OFFSET, 0]}
             lensRadius={LENS_RADIUS}
           />
         </group>

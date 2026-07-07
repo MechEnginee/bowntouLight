@@ -1,7 +1,8 @@
-// components/fixtures/MovingHead.tsx  (LED Wash Moving — 19×15W 타입)
+// components/fixtures/MovingHead.tsx  (LED Wash Moving — 19×15W Bee-Eye 타입)
 // 워시 무빙헤드: 베이스 + 요크(양팔) + 두꺼운 헤드 + 19구 렌즈 전면부.
 // 실기 특성 — 넓은 줌(5~60°), Pan 540°/Tilt 270°, RGBW 컬러 믹싱.
-// 빔은 VolumetricBeam(원뿔 + 표면 스팟)으로 표현.
+// 빔: 렌즈 19개 각각에서 가는 레이가 나가고, 줌을 넓히면 바깥 링일수록
+// 바깥쪽으로 기울어 부채꼴(꽃모양)로 갈라진다 — Bee-Eye 특유의 멀티 레이.
 
 import { useMemo } from "react";
 import * as THREE from "three";
@@ -21,8 +22,7 @@ interface Props {
 const d2r = THREE.MathUtils.degToRad;
 
 const HEAD_PIVOT_Y = -0.3; // 베이스 → tilt 피벗
-const LENS_OFFSET = 0.13; // 피벗 → 렌즈면
-const LENS_RADIUS = 0.13;
+const FACE_Y = -0.125; // 피벗 → 렌즈면(로컬 Y)
 const REF_ANGLE = 25; // 에너지 보존 기준각
 
 const bodyMat = { color: "#232326", metalness: 0.5, roughness: 0.5 };
@@ -43,6 +43,26 @@ function lensPositions(): [number, number][] {
 
 export function MovingHead({ on, dimmer, color, pan, tilt, angle, position }: Props) {
   const lenses = useMemo(lensPositions, []);
+
+  // 각 렌즈의 레이 방향: 바깥 링일수록 줌 반각만큼 바깥쪽으로 기울인다 (부채꼴 퍼짐)
+  const rays = useMemo(() => {
+    const half = angle / 2;
+    return lenses.map(([px, py], i) => {
+      const ringFrac = i === 0 ? 0 : i < 7 ? 0.5 : 1;
+      const az = Math.atan2(py, px);
+      const quat = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(-Math.sin(az), 0, Math.cos(az)),
+        d2r(half * ringFrac),
+      );
+      return {
+        lensLocal: [px, FACE_Y, py] as [number, number, number],
+        quat,
+      };
+    });
+  }, [lenses, angle]);
+
+  // 개별 레이는 가늘게 유지하고, 줌은 주로 "갈라짐"으로 표현 (실기 Bee-Eye 특성)
+  const rayAngle = 2 + angle * 0.1;
 
   return (
     <group>
@@ -99,20 +119,30 @@ export function MovingHead({ on, dimmer, color, pan, tilt, angle, position }: Pr
             ))}
           </group>
 
-          <VolumetricBeam
-            on={on}
-            dimmer={dimmer}
-            color={color}
-            angle={angle}
-            refAngle={REF_ANGLE}
-            position={position}
-            pan={pan}
-            tilt={tilt}
-            headOffsetY={HEAD_PIVOT_Y}
-            lensOffset={LENS_OFFSET}
-            lensRadius={LENS_RADIUS}
-            castShadow
-          />
+          {/* 19갈래 멀티 레이 — 표면 음영용 spotLight는 중앙 레이 1개만 */}
+          {rays.map((ray, i) => (
+            <VolumetricBeam
+              key={i}
+              on={on}
+              dimmer={dimmer}
+              color={color}
+              angle={rayAngle}
+              energyAngle={angle}
+              refAngle={REF_ANGLE}
+              position={position}
+              pan={pan}
+              tilt={tilt}
+              headOffsetY={HEAD_PIVOT_Y}
+              lensLocal={ray.lensLocal}
+              lensRadius={0.022}
+              rayQuat={ray.quat}
+              segments={14}
+              intensityScale={0.7}
+              showSpotlight={i === 0}
+              spotlightAngle={angle}
+              castShadow={i === 0}
+            />
+          ))}
         </group>
       </group>
     </group>

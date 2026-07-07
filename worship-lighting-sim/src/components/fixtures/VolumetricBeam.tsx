@@ -1,9 +1,11 @@
 // components/fixtures/VolumetricBeam.tsx
-// 무빙/미니빔 공용 볼류메트릭 빔.
+// 무빙/미니빔 공용 볼류메트릭 빔(레이 1가닥).
 //  - 잘린 원뿔(truncated cone) + additive 셰이더: 렌즈에서 멀어질수록·가장자리로 갈수록 페이드
 //  - 바닥(y=0)·뒷벽(z=-4)과의 교차를 계산해 빔 길이를 결정하고, 맞은 표면에 타원 스팟을 그린다
-//  - 에너지 보존: 빔각이 넓어지면 같은 광량이 퍼지므로 밝기가 줄어든다 (refAngle 대비 비율)
+//  - 에너지 보존: 빔각(energyAngle)이 넓어지면 같은 광량이 퍼지므로 밝기가 줄어든다
 // 이 컴포넌트는 헤드의 tilt 그룹 안(로컬 -Y가 빔 방향)에 배치하는 것을 전제로 한다.
+// 워시처럼 여러 갈래로 갈라지는 픽스처는 lensLocal(렌즈 위치) + rayQuat(갈래 방향)을
+// 다르게 준 인스턴스를 여러 개 배치한다.
 
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -13,6 +15,8 @@ const d2r = THREE.MathUtils.degToRad;
 const MAX_LENGTH = 25;
 const FLOOR_Y = 0;
 const WALL_Z = -4;
+
+const IDENTITY_QUAT = new THREE.Quaternion();
 
 /** 빔각(전체각)이 refAngle에서 벗어날 때의 밝기 배율 — 넓어지면 어두워진다 */
 function energyScale(angle: number, refAngle: number): number {
@@ -74,8 +78,10 @@ interface Props {
   on: boolean;
   dimmer: number;
   color: string;
-  /** 빔 전체각(도) — 원뿔 반각은 angle/2 */
+  /** 이 레이의 전체각(도) — 원뿔 반각은 angle/2 */
   angle: number;
+  /** 에너지 보존 계산용 각(도) — 워시는 부채꼴 전체각, 생략 시 angle */
+  energyAngle?: number;
   /** 에너지 보존 기준각(도) — 이 각도일 때 배율 1 */
   refAngle: number;
   /** 픽스처 월드 좌표 (MovableFixture group의 position) */
@@ -84,10 +90,20 @@ interface Props {
   tilt: number; // 0..270, 135=중앙(수직 아래)
   /** 픽스처 원점 → tilt 피벗의 Y 오프셋 (예: -0.26) */
   headOffsetY: number;
-  /** 피벗 → 렌즈까지의 거리(빔 방향) */
-  lensOffset: number;
+  /** tilt 그룹 로컬에서의 렌즈(빔 시작점) 위치 */
+  lensLocal: [number, number, number];
   /** 렌즈(빔 시작) 반지름 */
   lensRadius: number;
+  /** tilt 그룹 로컬에서 -Y를 이 레이 방향으로 돌리는 회전 (기본: 정면) */
+  rayQuat?: THREE.Quaternion;
+  /** 원뿔 원주 세그먼트 수 — 갈래가 많은 워시는 낮춰서 부담 절감 */
+  segments?: number;
+  /** 밝기 배율 — 갈래가 많으면 낮춘다 */
+  intensityScale?: number;
+  /** 표면 음영용 spotLight 포함 여부 (갈래 다발에서는 대표 1개만) */
+  showSpotlight?: boolean;
+  /** spotLight의 전체각(도) — 워시는 부채꼴 전체를 비추도록 별도 지정 */
+  spotlightAngle?: number;
   castShadow?: boolean;
 }
 
@@ -96,13 +112,19 @@ export function VolumetricBeam({
   dimmer,
   color,
   angle,
+  energyAngle,
   refAngle,
   position,
   pan,
   tilt,
   headOffsetY,
-  lensOffset,
+  lensLocal,
   lensRadius,
+  rayQuat = IDENTITY_QUAT,
+  segments = 40,
+  intensityScale = 1,
+  showSpotlight = true,
+  spotlightAngle,
   castShadow = false,
 }: Props) {
   const lightRef = useRef<THREE.SpotLight>(null);
@@ -152,15 +174,20 @@ export function VolumetricBeam({
     spotMat.dispose();
   }, [beamMat, spotMat]);
 
+  const [lx, ly, lz] = lensLocal;
+
   // ─── 월드 공간에서 빔 길이·표면 교차 계산 (모든 입력이 스토어 값 → 렌더 시 순수 계산) ───
   const { length, endRadius, hit, spotQuat, spotScale, spotPos } = useMemo(() => {
     const half = d2r(angle / 2);
-    const q = new THREE.Quaternion().setFromEuler(
+    // 월드 방향 = pan/tilt 회전 ∘ 레이 로컬 회전 ∘ (0,-1,0)
+    const qpt = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(d2r(tilt - 135), d2r(pan - 270), 0, "YXZ"),
     );
-    const dir = new THREE.Vector3(0, -1, 0).applyQuaternion(q);
-    const origin = new THREE.Vector3(position[0], position[1] + headOffsetY, position[2])
-      .addScaledVector(dir, lensOffset);
+    const qTotal = qpt.clone().multiply(rayQuat);
+    const dir = new THREE.Vector3(0, -1, 0).applyQuaternion(qTotal);
+    const origin = new THREE.Vector3(lx, ly, lz)
+      .applyQuaternion(qpt)
+      .add(new THREE.Vector3(position[0], position[1] + headOffsetY, position[2]));
 
     let L = MAX_LENGTH;
     let normal: THREE.Vector3 | null = null;
@@ -182,12 +209,12 @@ export function VolumetricBeam({
 
     const endRadius = lensRadius + Math.tan(half) * L;
 
-    // 스팟 타원: 로컬(빔) 공간에서 표면 법선 기준의 기울어진 원판
+    // 스팟 타원: 레이 로컬 공간에서 표면 법선 기준의 기울어진 원판
     let spotQuat: THREE.Quaternion | null = null;
     let spotScale: [number, number, number] = [1, 1, 1];
-    let spotPos: [number, number, number] = [0, -lensOffset - L, 0];
+    let spotPos: [number, number, number] = [0, -L, 0];
     if (normal) {
-      const qInv = q.clone().invert();
+      const qInv = qTotal.clone().invert();
       const nLocal = normal.clone().applyQuaternion(qInv).normalize();
       const dLocal = new THREE.Vector3(0, -1, 0);
       const cos = Math.abs(dLocal.dot(nLocal));
@@ -203,17 +230,17 @@ export function VolumetricBeam({
       const rMajor = endRadius / THREE.MathUtils.clamp(cos, 0.18, 1);
       spotScale = [rMajor, endRadius, 1];
       // Z-파이팅 방지: 표면 법선 방향으로 살짝 띄운다
-      const p = new THREE.Vector3(0, -lensOffset - L, 0).addScaledVector(nLocal, 0.02);
+      const p = new THREE.Vector3(0, -L, 0).addScaledVector(nLocal, 0.02);
       spotPos = [p.x, p.y, p.z];
     }
 
     return { length: L, endRadius, hit: !!normal, spotQuat, spotScale, spotPos };
-  }, [angle, pan, tilt, position, headOffsetY, lensOffset, lensRadius]);
+  }, [angle, pan, tilt, position, headOffsetY, lx, ly, lz, lensRadius, rayQuat]);
 
   // ─── 밝기: 에너지 보존 — 넓게 퍼질수록 어두워진다 ───
-  const energy = energyScale(angle, refAngle);
-  const beamIntensity = Math.min(1.6, 1.1 * dimmer * energy);
-  const spotIntensity = Math.min(1.3, 0.9 * dimmer * energy);
+  const energy = energyScale(energyAngle ?? angle, refAngle);
+  const beamIntensity = Math.min(1.6, 1.1 * dimmer * energy * intensityScale);
+  const spotIntensity = Math.min(1.3, 0.9 * dimmer * energy * intensityScale);
 
   beamMat.uniforms.uColor.value.set(color);
   beamMat.uniforms.uIntensity.value = beamIntensity;
@@ -223,29 +250,29 @@ export function VolumetricBeam({
   spotMat.uniforms.uIntensity.value = spotIntensity;
 
   return (
-    <>
+    <group position={lensLocal} quaternion={rayQuat}>
       {/* 실제 조명(표면 음영용) — 각도·에너지 동기화 */}
-      <primitive object={target} position={[0, -lensOffset - 1, 0]} />
-      <spotLight
-        ref={lightRef}
-        position={[0, -lensOffset, 0]}
-        angle={d2r(angle / 2)}
-        penumbra={0.4}
-        distance={MAX_LENGTH}
-        intensity={on ? dimmer * Math.min(energy, 2) * 25 : 0}
-        color={color}
-        castShadow={castShadow}
-      />
+      {showSpotlight && (
+        <>
+          <primitive object={target} position={[0, -1, 0]} />
+          <spotLight
+            ref={lightRef}
+            position={[0, 0, 0]}
+            angle={d2r((spotlightAngle ?? angle) / 2)}
+            penumbra={0.4}
+            distance={MAX_LENGTH}
+            intensity={on ? dimmer * Math.min(energy, 2) * 25 : 0}
+            color={color}
+            castShadow={castShadow}
+          />
+        </>
+      )}
 
       {on && (
         <>
           {/* 볼류메트릭 콘 (렌즈 → 표면/최대거리) */}
-          <mesh
-            position={[0, -lensOffset - length / 2, 0]}
-            material={beamMat}
-            raycast={() => null}
-          >
-            <cylinderGeometry args={[lensRadius, endRadius, length, 40, 1, true]} />
+          <mesh position={[0, -length / 2, 0]} material={beamMat} raycast={() => null}>
+            <cylinderGeometry args={[lensRadius, endRadius, length, segments, 1, true]} />
           </mesh>
 
           {/* 표면 스팟 (바닥/뒷벽) */}
@@ -262,6 +289,6 @@ export function VolumetricBeam({
           )}
         </>
       )}
-    </>
+    </group>
   );
 }
