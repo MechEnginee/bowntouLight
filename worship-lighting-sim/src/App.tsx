@@ -30,8 +30,22 @@ const MODE_LABEL = {
   scale: "크기",
 } as const;
 
+/** 씬 환경광 — 스토어 sceneBrightness에 연동. Canvas 내부에서 구독해야 리렌더된다. */
+function SceneLights() {
+  const b = useSceneStore((s) => s.sceneBrightness);
+  return (
+    <>
+      <ambientLight intensity={b} />
+      <hemisphereLight args={["#8899aa", "#181820", b]} />
+      <directionalLight position={[5, 10, 7]} intensity={b} castShadow />
+    </>
+  );
+}
+
 export default function App() {
   const transformMode = useSceneStore((s) => s.transformMode);
+  const sceneBrightness = useSceneStore((s) => s.sceneBrightness);
+  const setSceneBrightness = useSceneStore((s) => s.setSceneBrightness);
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
@@ -223,9 +237,7 @@ export default function App() {
           gl={{ antialias: true }}
           onCreated={(state) => (r3f.current = state)}
         >
-          <ambientLight intensity={0.5} />
-          <hemisphereLight args={["#8899aa", "#181820", 0.5]} />
-          <directionalLight position={[5, 10, 7]} intensity={0.5} castShadow />
+          <SceneLights />
 
           <Stage />
           <FixtureGroup />
@@ -273,10 +285,47 @@ export default function App() {
           />
         )}
 
+        {/* 좌상단: 씬 전역 밝기 조절 (인터랙티브) */}
         <div
           style={{
             position: "absolute",
             top: 12,
+            left: 12,
+            width: 210,
+            color: "#c8c8d0",
+            font: "12px/1.4 monospace",
+            background: "#1a1a2ee6",
+            padding: "10px 12px",
+            borderRadius: 6,
+            border: "1px solid #2a2a40",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 5,
+            }}
+          >
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>Scene 밝기</span>
+            <span style={{ color: "#4A90D9" }}>
+              {Math.round(sceneBrightness * 100)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={200}
+            value={sceneBrightness * 100}
+            onChange={(e) => setSceneBrightness(parseFloat(e.target.value) / 100)}
+            style={{ width: "100%", accentColor: "#4A90D9" }}
+          />
+        </div>
+
+        <div
+          style={{
+            position: "absolute",
+            top: 78,
             left: 12,
             color: "#c8c8d0",
             font: "12px/1.6 monospace",

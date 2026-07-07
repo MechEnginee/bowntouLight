@@ -17,13 +17,18 @@ const bodyMat = { color: "#141416", metalness: 0.4, roughness: 0.6 };
 const FLASH_DUTY = 0.14; // 한 주기 중 발광 비율
 
 export function StrobeLight({ on, dimmer, rate }: Props) {
-  const lightRef = useRef<THREE.PointLight>(null);
+  const lightRef = useRef<THREE.SpotLight>(null);
+  // 스포트라이트가 패널 정면(+Z)을 향하도록 target을 자식으로 붙인다
+  const target = useMemo(() => new THREE.Object3D(), []);
   // 두 스트립이 공유하는 재질 — useFrame에서 점멸 변조
   const stripMat = useMemo(
     () => new THREE.MeshBasicMaterial({ color: "#262626", toneMapped: false }),
     [],
   );
   useEffect(() => () => stripMat.dispose(), [stripMat]);
+  useEffect(() => {
+    if (lightRef.current) lightRef.current.target = target;
+  }, [target]);
 
   useFrame(({ clock }) => {
     let level = 0;
@@ -35,7 +40,8 @@ export function StrobeLight({ on, dimmer, rate }: Props) {
     // 꺼짐: 어두운 회색 렌즈 / 켜짐: 흰색 발광
     stripMat.color.setScalar(0.15 + v * 0.85);
     if (lightRef.current) {
-      lightRef.current.intensity = v * 15;
+      // spotLight는 넓은 각도로 광량이 퍼지므로 pointLight보다 강도를 높인다
+      lightRef.current.intensity = v * 60;
     }
   });
 
@@ -69,8 +75,18 @@ export function StrobeLight({ on, dimmer, rate }: Props) {
         <planeGeometry args={[0.4, 0.085]} />
       </mesh>
 
-      {/* 플래시 라이트 (전방) */}
-      <pointLight ref={lightRef} position={[0, 0, 0.4]} distance={7} intensity={0} color="#ffffff" />
+      {/* 플래시 라이트 — 패널 정면(+Z)만 비추는 넓은 스팟. 뒤/아래로 새지 않음 */}
+      <primitive object={target} position={[0, 0, 3]} />
+      <spotLight
+        ref={lightRef}
+        position={[0, 0, 0.06]}
+        angle={Math.PI / 2.6}
+        penumbra={0.7}
+        distance={9}
+        decay={1.2}
+        intensity={0}
+        color="#ffffff"
+      />
     </group>
   );
 }

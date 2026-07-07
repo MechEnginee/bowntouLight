@@ -45,6 +45,10 @@ interface SceneState extends Snapshot {
   clipboard: FixtureRuntime[];
   past: Snapshot[];
   future: Snapshot[];
+  /** 씬 전역 환경광 밝기 (0=암전, 1=기본) — 좌상단 컨트롤로 조절 */
+  sceneBrightness: number;
+
+  setSceneBrightness: (v: number) => void;
 
   // 선택
   selectSingle: (id: string) => void;
@@ -206,6 +210,10 @@ export const useSceneStore = create<SceneState>()((set) => ({
   clipboard: [],
   past: [],
   future: [],
+  sceneBrightness: 0.5,
+
+  setSceneBrightness: (v) =>
+    set({ sceneBrightness: Math.max(0, Math.min(2, v)) }),
 
   // ─── 선택 (히스토리 미기록) ───
   selectSingle: (id) => set({ selectedIds: [id], anchorId: id }),
