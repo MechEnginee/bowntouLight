@@ -198,11 +198,11 @@ export function ControlPanel() {
         제어 패널
       </div>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>
-        {multi ? `${selected.length}개 선택됨` : primary.id}
+        {multi ? `${selected.length}개 선택됨` : primary.name}
       </div>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 14 }}>
         {multi
-          ? `대표: ${primary.id}`
+          ? `대표: ${primary.name}`
           : `${primary.mount} · (${primary.position.map((n) => n.toFixed(1)).join(", ")})`}
       </div>
 

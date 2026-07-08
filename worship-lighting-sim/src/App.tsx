@@ -59,6 +59,44 @@ export default function App() {
   const setLightPosition = useSceneStore((s) => s.setLightPosition);
   const backgroundColor = useSceneStore((s) => s.backgroundColor);
   const setBackgroundChannel = useSceneStore((s) => s.setBackgroundChannel);
+  const sceneName = useSceneStore((s) => s.sceneName);
+  const setSceneName = useSceneStore((s) => s.setSceneName);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ─── 씬 JSON 내보내기 ───
+  const handleExport = () => {
+    const data = useSceneStore.getState().exportScene();
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    // 파일시스템 금지 문자만 치환 (한글 등은 보존)
+    const safe =
+      (data.sceneName || "scene").replace(/[\\/:*?"<>|]+/g, "_").trim() || "scene";
+    a.href = url;
+    a.download = `${safe}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ─── 씬 JSON 불러오기 (전체 교체) ───
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일 재선택 허용
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result));
+        const res = useSceneStore.getState().importScene(data);
+        if (!res.ok) alert(`불러오기 실패: ${res.error}`);
+      } catch {
+        alert("불러오기 실패: JSON 파싱 오류");
+      }
+    };
+    reader.readAsText(file);
+  };
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
@@ -318,12 +356,76 @@ export default function App() {
             border: "1px solid #2a2a40",
           }}
         >
+          {/* 씬 명칭 (수정 가능) */}
+          <div style={{ color: "#7a7a9a", fontSize: 10, marginBottom: 3 }}>씬 이름</div>
+          <input
+            type="text"
+            value={sceneName}
+            onChange={(e) => setSceneName(e.target.value)}
+            placeholder="씬 이름"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              background: "#12121f",
+              border: "1px solid #333350",
+              borderRadius: 4,
+              color: "#E0E0E0",
+              fontSize: 13,
+              fontWeight: 700,
+              padding: "5px 7px",
+              marginBottom: 8,
+            }}
+          />
+
+          {/* 내보내기 / 불러오기 */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <button
+              onClick={handleExport}
+              style={{
+                flex: 1,
+                padding: "5px",
+                borderRadius: 4,
+                border: "1px solid #3a5a3a",
+                background: "#1a2a1a",
+                color: "#9ad09a",
+                cursor: "pointer",
+                fontSize: 11,
+              }}
+            >
+              내보내기
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                flex: 1,
+                padding: "5px",
+                borderRadius: 4,
+                border: "1px solid #3a3a5a",
+                background: "#1a1a2a",
+                color: "#9ab8e0",
+                cursor: "pointer",
+                fontSize: 11,
+              }}
+            >
+              불러오기
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleImportFile}
+              style={{ display: "none" }}
+            />
+          </div>
+
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
               marginBottom: 5,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
             }}
           >
             <span style={{ color: "#4A90D9", fontWeight: 700 }}>Scene 밝기</span>
@@ -397,7 +499,7 @@ export default function App() {
         <div
           style={{
             position: "absolute",
-            top: 246,
+            bottom: 12,
             left: 12,
             color: "#c8c8d0",
             font: "12px/1.6 monospace",

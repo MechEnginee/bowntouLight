@@ -144,7 +144,7 @@ export function FixtureList() {
                       flex: "0 0 auto",
                     }}
                   />
-                  <span style={{ flex: 1 }}>{id}</span>
+                  <span style={{ flex: 1 }}>{f.name}</span>
                 </div>
               );
             })}
