@@ -49,9 +49,12 @@ interface SceneState extends Snapshot {
   sceneBrightness: number;
   /** 메인 방향광(그림자 담당) 위치 — 좌상단 컨트롤로 조절 */
   lightPosition: Vec3;
+  /** Scene 배경색 [R,G,B] (0~255) */
+  backgroundColor: [number, number, number];
 
   setSceneBrightness: (v: number) => void;
   setLightPosition: (axis: 0 | 1 | 2, value: number) => void;
+  setBackgroundChannel: (channel: 0 | 1 | 2, value: number) => void;
 
   // 선택
   selectSingle: (id: string) => void;
@@ -105,7 +108,8 @@ const initialFixtures: Record<string, FixtureRuntime> = Object.fromEntries(
       rotation: c.rotation ?? [0, 0, 0],
       scale: [1, 1, 1],
       mount: c.mount,
-      on: false,
+      // 배치형 광원은 기본 점등 상태
+      on: c.type === "light",
       dimmer: 1,
       color: DEFAULT_COLOR[c.type] ?? "#ffffff",
       pan: 270,
@@ -123,6 +127,7 @@ const ID_PREFIX: Record<FixtureType, string> = {
   hazer: "hazer",
   wall: "wall",
   floor: "floor",
+  light: "light",
 };
 
 /** 타입 접두어 기준으로 비어 있지 않은 다음 번호 id 생성 (예: moving-9) */
@@ -164,6 +169,10 @@ function defaultObject(type: FixtureType, id: string): FixtureRuntime {
     base.scale = [0.5, 1, 1];
   }
   if (type === "hazer") base.position = [0, 0.5, 0];
+  if (type === "light") {
+    base.position = [0, 6, 4];
+    base.on = true; // 광원은 추가 즉시 점등
+  }
   return base;
 }
 
@@ -215,6 +224,7 @@ export const useSceneStore = create<SceneState>()((set) => ({
   future: [],
   sceneBrightness: 0.5,
   lightPosition: [5, 10, 7],
+  backgroundColor: [13, 13, 13], // #0d0d0d
 
   setSceneBrightness: (v) =>
     set({ sceneBrightness: Math.max(0, Math.min(2, v)) }),
@@ -224,6 +234,13 @@ export const useSceneStore = create<SceneState>()((set) => ({
       const p = [...s.lightPosition] as Vec3;
       p[axis] = value;
       return { lightPosition: p };
+    }),
+
+  setBackgroundChannel: (channel, value) =>
+    set((s) => {
+      const c = [...s.backgroundColor] as [number, number, number];
+      c[channel] = Math.max(0, Math.min(255, Math.round(value)));
+      return { backgroundColor: c };
     }),
 
   // ─── 선택 (히스토리 미기록) ───

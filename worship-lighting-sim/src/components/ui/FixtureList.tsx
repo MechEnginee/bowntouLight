@@ -12,6 +12,7 @@ const GROUP_LABEL: Record<FixtureType, string> = {
   hazer: "헤이저",
   wall: "반사 벽 (Wall)",
   floor: "반사 바닥 (Floor)",
+  light: "광원 (Light)",
 };
 
 const TYPE_ORDER: FixtureType[] = [
@@ -19,12 +20,13 @@ const TYPE_ORDER: FixtureType[] = [
   "par",
   "strobe",
   "hazer",
+  "light",
   "wall",
   "floor",
 ];
 
 /** 목록에서 바로 새 오브젝트를 추가할 수 있는 타입 */
-const ADDABLE: FixtureType[] = ["wall", "floor"];
+const ADDABLE: FixtureType[] = ["light", "wall", "floor"];
 
 export function FixtureList() {
   const fixtures = useSceneStore((s) => s.fixtures);

@@ -16,6 +16,7 @@ import { SelectionControls } from "./components/scene/SelectionControls";
 import { FixtureList } from "./components/ui/FixtureList";
 import { ControlPanel } from "./components/ui/ControlPanel";
 import { NumberField } from "./components/ui/NumberField";
+import { RgbRow } from "./components/ui/RgbRow";
 import { useSceneStore } from "./store/scene-store";
 
 interface Rect {
@@ -44,12 +45,20 @@ function SceneLights() {
   );
 }
 
+/** Scene 배경색 — 스토어 backgroundColor(RGB)에 연동. */
+function SceneBackground() {
+  const [r, g, b] = useSceneStore((s) => s.backgroundColor);
+  return <color attach="background" args={[r / 255, g / 255, b / 255]} />;
+}
+
 export default function App() {
   const transformMode = useSceneStore((s) => s.transformMode);
   const sceneBrightness = useSceneStore((s) => s.sceneBrightness);
   const setSceneBrightness = useSceneStore((s) => s.setSceneBrightness);
   const lightPosition = useSceneStore((s) => s.lightPosition);
   const setLightPosition = useSceneStore((s) => s.setLightPosition);
+  const backgroundColor = useSceneStore((s) => s.backgroundColor);
+  const setBackgroundChannel = useSceneStore((s) => s.setBackgroundChannel);
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
@@ -245,6 +254,7 @@ export default function App() {
           gl={{ antialias: true }}
           onCreated={(state) => (r3f.current = state)}
         >
+          <SceneBackground />
           <SceneLights />
 
           <Stage />
@@ -344,7 +354,7 @@ export default function App() {
               borderTop: "1px solid #2a2a40",
             }}
           >
-            <div style={{ color: "#7a7a9a", marginBottom: 4 }}>광원 위치 (Light)</div>
+            <div style={{ color: "#7a7a9a", marginBottom: 4 }}>태양광 위치 (Sun)</div>
             <div style={{ display: "flex", gap: 5 }}>
               {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
                 <div key={axis} style={{ flex: 1 }}>
@@ -368,12 +378,26 @@ export default function App() {
               ))}
             </div>
           </div>
+
+          <div
+            style={{
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <div style={{ color: "#7a7a9a", marginBottom: 4 }}>배경색 (RGB)</div>
+            <RgbRow
+              value={backgroundColor}
+              onChange={(ch, v) => setBackgroundChannel(ch, v)}
+            />
+          </div>
         </div>
 
         <div
           style={{
             position: "absolute",
-            top: 158,
+            top: 246,
             left: 12,
             color: "#c8c8d0",
             font: "12px/1.6 monospace",

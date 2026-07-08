@@ -5,6 +5,8 @@
 import * as THREE from "three";
 import { useSceneStore, type Vec3 } from "../../store/scene-store";
 import { NumberField } from "./NumberField";
+import { RgbRow } from "./RgbRow";
+import { hexToRgb, rgbToHex } from "./color-utils";
 
 function Slider({
   label,
@@ -169,14 +171,17 @@ export function ControlPanel() {
   const isSurface = selected.every(
     (f) => f.type === "wall" || f.type === "floor",
   );
-  // 벽/바닥은 표면색으로 color를 재사용
+  const isLight = selected.every((f) => f.type === "light");
+  // 색을 가진 오브젝트: 빔(무빙/미니빔)·광원·벽/바닥. 벽·바닥·광원은 RGB로 입력
   const hasColor = selected.every(
     (f) =>
       f.type === "movingHead" ||
       f.type === "par" ||
       f.type === "wall" ||
-      f.type === "floor",
+      f.type === "floor" ||
+      f.type === "light",
   );
+  const useRgbColor = isSurface || isLight;
   const hasDimmer = selected.every(
     (f) => f.type !== "hazer" && f.type !== "wall" && f.type !== "floor",
   );
@@ -288,25 +293,40 @@ export function ControlPanel() {
       {hasColor && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 12, color: "#b0b0c0", marginBottom: 6 }}>
-            {isSurface ? "표면색 (Surface Color)" : "색상 (Color)"}
+            {isSurface
+              ? "표면색 (RGB)"
+              : isLight
+                ? "광원색 (RGB)"
+                : "색상 (Color)"}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input
-              type="color"
-              value={primary.color}
-              onChange={(e) => update(selectedIds, { color: e.target.value })}
-              style={{
-                width: 48,
-                height: 36,
-                border: "none",
-                background: "none",
-                cursor: "pointer",
+          {useRgbColor ? (
+            <RgbRow
+              value={hexToRgb(primary.color)}
+              onChange={(ch, v) => {
+                const rgb = hexToRgb(primary.color);
+                rgb[ch] = v;
+                update(selectedIds, { color: rgbToHex(rgb) });
               }}
             />
-            <span style={{ fontFamily: "monospace", fontSize: 13, color: "#b0b0c0" }}>
-              {primary.color.toUpperCase()}
-            </span>
-          </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input
+                type="color"
+                value={primary.color}
+                onChange={(e) => update(selectedIds, { color: e.target.value })}
+                style={{
+                  width: 48,
+                  height: 36,
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
+                }}
+              />
+              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#b0b0c0" }}>
+                {primary.color.toUpperCase()}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

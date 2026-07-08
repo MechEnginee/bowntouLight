@@ -14,6 +14,7 @@ import { MiniBeam } from "./MiniBeam";
 import { StrobeLight } from "./StrobeLight";
 import { Hazer } from "./Hazer";
 import { Surface } from "./Surface";
+import { SceneLight } from "./SceneLight";
 
 export function MovableFixture({ id }: { id: string }) {
   const f = useSceneStore((s) => s.fixtures[id]);
@@ -62,6 +63,9 @@ export function MovableFixture({ id }: { id: string }) {
     case "wall":
     case "floor":
       visual = <Surface type={f.type} color={f.color} />;
+      break;
+    case "light":
+      visual = <SceneLight on={f.on} dimmer={f.dimmer} color={f.color} />;
       break;
   }
 

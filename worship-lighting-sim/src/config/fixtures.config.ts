@@ -9,7 +9,8 @@ export type FixtureType =
   | "strobe"
   | "hazer"
   | "wall"
-  | "floor";
+  | "floor"
+  | "light";
 
 export interface FixtureConfig {
   id: string;
@@ -137,10 +138,30 @@ const surfaces: FixtureConfig[] = [
   },
 ];
 
+// 배치형 광원 (포인트 라이트) — 목록에서 추가/선택/기즈모/삭제 가능한 오브젝트.
+// 무대를 비추는 보조광. 기본 2개를 무대 좌우 위쪽에 둔다.
+const sceneLights: FixtureConfig[] = [
+  {
+    id: "light-1",
+    type: "light",
+    position: [-4, 6, 5],
+    baseAddress: -1,
+    mount: "무대 좌측 상단",
+  },
+  {
+    id: "light-2",
+    type: "light",
+    position: [4, 6, 5],
+    baseAddress: -1,
+    mount: "무대 우측 상단",
+  },
+];
+
 export const FIXTURES_CONFIG: FixtureConfig[] = [
   ...movingHeads,
   ...parLights,
   ...strobes,
   hazer,
   ...surfaces,
+  ...sceneLights,
 ];
