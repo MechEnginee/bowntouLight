@@ -2,9 +2,9 @@
 // 선택된 픽스처 전체에 On/Off·밝기·각도·색을 적용한다.
 // 표시 값은 대표(앵커) 픽스처 기준, 컨트롤 노출은 선택 전체의 공통 속성만.
 
-import { useEffect, useState } from "react";
 import * as THREE from "three";
 import { useSceneStore, type Vec3 } from "../../store/scene-store";
+import { NumberField } from "./NumberField";
 
 function Slider({
   label,
@@ -13,6 +13,7 @@ function Slider({
   max,
   step = 1,
   suffix,
+  decimals = 0,
   onChange,
 }: {
   label: string;
@@ -21,24 +22,32 @@ function Slider({
   max: number;
   step?: number;
   suffix?: string;
+  decimals?: number;
   onChange: (v: number) => void;
 }) {
+  // 슬라이더로 나온 값이 범위를 벗어나지 않도록 입력 커밋 시 clamp
+  const commit = (v: number) => onChange(Math.max(min, Math.min(max, v)));
   return (
     <div style={{ marginBottom: 14 }}>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
+          alignItems: "center",
           fontSize: 12,
           color: "#b0b0c0",
           marginBottom: 4,
         }}
       >
         <span>{label}</span>
-        <span style={{ color: "#4A90D9", fontFamily: "monospace" }}>
-          {Math.round(value)}
-          {suffix}
-        </span>
+        <NumberField
+          value={value}
+          onCommit={commit}
+          suffix={suffix}
+          decimals={decimals}
+          width={52}
+          align="right"
+        />
       </div>
       <input
         type="range"
@@ -50,62 +59,6 @@ function Slider({
         style={{ width: "100%", accentColor: "#4A90D9" }}
       />
     </div>
-  );
-}
-
-/** 텍스트 입력용 숫자 필드 — 편집 중엔 타이핑한 문자열을 그대로 유지하고,
- * blur/Enter에서만 파싱해 커밋한다. 편집 중이 아닐 때만 외부 값(스토어)과 동기화. */
-function AxisNumberInput({
-  value,
-  onCommit,
-}: {
-  value: number;
-  onCommit: (v: number) => void;
-}) {
-  const [text, setText] = useState(() => value.toFixed(2));
-  const [focused, setFocused] = useState(false);
-
-  useEffect(() => {
-    if (!focused) setText(value.toFixed(2));
-  }, [value, focused]);
-
-  const commit = () => {
-    const v = parseFloat(text);
-    if (Number.isFinite(v)) onCommit(v);
-    else setText(value.toFixed(2));
-  };
-
-  return (
-    <input
-      type="text"
-      inputMode="decimal"
-      value={text}
-      onFocus={() => setFocused(true)}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={() => {
-        setFocused(false);
-        commit();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        if (e.key === "Escape") {
-          setText(value.toFixed(2));
-          (e.target as HTMLInputElement).blur();
-        }
-      }}
-      style={{
-        width: "100%",
-        boxSizing: "border-box",
-        background: "#12121f",
-        border: "1px solid #333350",
-        borderRadius: 4,
-        color: "#E0E0E0",
-        fontFamily: "monospace",
-        fontSize: 12,
-        padding: "4px 2px",
-        textAlign: "center",
-      }}
-    />
   );
 }
 
@@ -147,8 +100,9 @@ function TransformRow({
             >
               {axisLabel}
             </div>
-            <AxisNumberInput
+            <NumberField
               value={toDisplay(values[axis])}
+              width="100%"
               onCommit={(v) =>
                 setAxisValue(
                   selectedIds,
@@ -303,6 +257,7 @@ export function ControlPanel() {
             min={angleMin}
             max={angleMax}
             step={0.5}
+            decimals={1}
             suffix="°"
             onChange={(v) => update(selectedIds, { angle: v })}
           />
@@ -320,6 +275,7 @@ export function ControlPanel() {
             min={0}
             max={20}
             step={0.5}
+            decimals={1}
             suffix="Hz"
             onChange={(v) => update(selectedIds, { strobeRate: v })}
           />

@@ -47,8 +47,11 @@ interface SceneState extends Snapshot {
   future: Snapshot[];
   /** 씬 전역 환경광 밝기 (0=암전, 1=기본) — 좌상단 컨트롤로 조절 */
   sceneBrightness: number;
+  /** 메인 방향광(그림자 담당) 위치 — 좌상단 컨트롤로 조절 */
+  lightPosition: Vec3;
 
   setSceneBrightness: (v: number) => void;
+  setLightPosition: (axis: 0 | 1 | 2, value: number) => void;
 
   // 선택
   selectSingle: (id: string) => void;
@@ -211,9 +214,17 @@ export const useSceneStore = create<SceneState>()((set) => ({
   past: [],
   future: [],
   sceneBrightness: 0.5,
+  lightPosition: [5, 10, 7],
 
   setSceneBrightness: (v) =>
     set({ sceneBrightness: Math.max(0, Math.min(2, v)) }),
+
+  setLightPosition: (axis, value) =>
+    set((s) => {
+      const p = [...s.lightPosition] as Vec3;
+      p[axis] = value;
+      return { lightPosition: p };
+    }),
 
   // ─── 선택 (히스토리 미기록) ───
   selectSingle: (id) => set({ selectedIds: [id], anchorId: id }),

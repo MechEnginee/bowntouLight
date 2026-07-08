@@ -15,6 +15,7 @@ import { FixtureGroup } from "./components/fixtures/FixtureGroup";
 import { SelectionControls } from "./components/scene/SelectionControls";
 import { FixtureList } from "./components/ui/FixtureList";
 import { ControlPanel } from "./components/ui/ControlPanel";
+import { NumberField } from "./components/ui/NumberField";
 import { useSceneStore } from "./store/scene-store";
 
 interface Rect {
@@ -30,14 +31,15 @@ const MODE_LABEL = {
   scale: "크기",
 } as const;
 
-/** 씬 환경광 — 스토어 sceneBrightness에 연동. Canvas 내부에서 구독해야 리렌더된다. */
+/** 씬 환경광 — 스토어 sceneBrightness/lightPosition에 연동. Canvas 내부에서 구독해야 리렌더된다. */
 function SceneLights() {
   const b = useSceneStore((s) => s.sceneBrightness);
+  const lp = useSceneStore((s) => s.lightPosition);
   return (
     <>
       <ambientLight intensity={b} />
       <hemisphereLight args={["#8899aa", "#181820", b]} />
-      <directionalLight position={[5, 10, 7]} intensity={b} castShadow />
+      <directionalLight position={lp} intensity={b} castShadow />
     </>
   );
 }
@@ -46,6 +48,8 @@ export default function App() {
   const transformMode = useSceneStore((s) => s.transformMode);
   const sceneBrightness = useSceneStore((s) => s.sceneBrightness);
   const setSceneBrightness = useSceneStore((s) => s.setSceneBrightness);
+  const lightPosition = useSceneStore((s) => s.lightPosition);
+  const setLightPosition = useSceneStore((s) => s.setLightPosition);
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
@@ -157,6 +161,10 @@ export default function App() {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || !r3f.current) return;
+    // 마퀴는 실제 3D 캔버스를 직접 눌렀을 때만 시작한다.
+    // (좌상단 밝기 슬라이더 같은 HTML 오버레이 위 클릭이면 여기서 중단 →
+    //  setPointerCapture로 슬라이더 드래그를 가로채는 버그 방지)
+    if (e.target !== r3f.current.gl.domElement) return;
     const rect = r3f.current.gl.domElement.getBoundingClientRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
@@ -285,13 +293,13 @@ export default function App() {
           />
         )}
 
-        {/* 좌상단: 씬 전역 밝기 조절 (인터랙티브) */}
+        {/* 좌상단: 씬 전역 밝기 + 광원 위치 조절 (인터랙티브) */}
         <div
           style={{
             position: "absolute",
             top: 12,
             left: 12,
-            width: 210,
+            width: 220,
             color: "#c8c8d0",
             font: "12px/1.4 monospace",
             background: "#1a1a2ee6",
@@ -304,13 +312,21 @@ export default function App() {
             style={{
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "center",
               marginBottom: 5,
             }}
           >
             <span style={{ color: "#4A90D9", fontWeight: 700 }}>Scene 밝기</span>
-            <span style={{ color: "#4A90D9" }}>
-              {Math.round(sceneBrightness * 100)}%
-            </span>
+            <NumberField
+              value={sceneBrightness * 100}
+              onCommit={(v) =>
+                setSceneBrightness(Math.max(0, Math.min(200, v)) / 100)
+              }
+              suffix="%"
+              decimals={0}
+              width={48}
+              align="right"
+            />
           </div>
           <input
             type="range"
@@ -320,12 +336,44 @@ export default function App() {
             onChange={(e) => setSceneBrightness(parseFloat(e.target.value) / 100)}
             style={{ width: "100%", accentColor: "#4A90D9" }}
           />
+
+          <div
+            style={{
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <div style={{ color: "#7a7a9a", marginBottom: 4 }}>광원 위치 (Light)</div>
+            <div style={{ display: "flex", gap: 5 }}>
+              {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
+                <div key={axis} style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: "#555570",
+                      textAlign: "center",
+                      marginBottom: 1,
+                    }}
+                  >
+                    {axisLabel}
+                  </div>
+                  <NumberField
+                    value={lightPosition[axis]}
+                    onCommit={(v) => setLightPosition(axis as 0 | 1 | 2, v)}
+                    decimals={1}
+                    width="100%"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div
           style={{
             position: "absolute",
-            top: 78,
+            top: 158,
             left: 12,
             color: "#c8c8d0",
             font: "12px/1.6 monospace",
