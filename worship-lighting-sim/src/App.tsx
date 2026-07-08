@@ -245,9 +245,35 @@ export default function App() {
     const minY = Math.min(m.y0, m.y1);
     const maxY = Math.max(m.y0, m.y1);
 
-    // 거의 클릭(작은 박스) → 빈 공간 클릭 = 선택 해제(추가선택 아닐 때)
+    // 거의 클릭(작은 박스) → 표면(벽/바닥)이 있으면 선택, 없으면(빈 하늘) 선택 해제
     if (maxX - minX < 4 && maxY - minY < 4) {
-      if (!m.additive) useSceneStore.getState().clearSelection();
+      const rectC = st.gl.domElement.getBoundingClientRect();
+      const ray = st.raycaster;
+      ray.setFromCamera(
+        new THREE.Vector2((m.x1 / rectC.width) * 2 - 1, -(m.y1 / rectC.height) * 2 + 1),
+        st.camera,
+      );
+      const hits = ray.intersectObjects(st.scene.children, true);
+      let surfaceId: string | null = null;
+      for (const h of hits) {
+        let n: THREE.Object3D | null = h.object;
+        while (n) {
+          const ud = n.userData as { fixtureId?: string; isSurface?: boolean };
+          if (ud?.fixtureId && ud.isSurface) {
+            surfaceId = ud.fixtureId;
+            break;
+          }
+          n = n.parent;
+        }
+        if (surfaceId) break;
+      }
+      const s = useSceneStore.getState();
+      if (surfaceId) {
+        if (m.additive) s.toggleSelect(surfaceId);
+        else s.selectSingle(surfaceId);
+      } else if (!m.additive) {
+        s.clearSelection();
+      }
       return;
     }
 

@@ -158,21 +158,22 @@ const sceneLights: FixtureConfig[] = [
   },
 ];
 
-// LED 바 (가로형 워시 조명) — 앞으로 넓게 퍼지는 라인 라이트. 프런트 트러스에 2개.
+// 트러스 바 (기둥+가로바 프레임) — 조명을 매다는 골포스트형 구조물.
+// 프런트(Z=0)·백(Z=-2.3) 프레임. 중심 y=2.35 이면 발판이 바닥에 닿는다.
 const bars: FixtureConfig[] = [
   {
     id: "bar-1",
     type: "bar",
-    position: [-2.5, 3.2, 1.2],
+    position: [0, 2.35, 0],
     baseAddress: -1,
     mount: "프런트 트러스",
   },
   {
     id: "bar-2",
     type: "bar",
-    position: [2.5, 3.2, 1.2],
+    position: [0, 2.35, -2.3],
     baseAddress: -1,
-    mount: "프런트 트러스",
+    mount: "백 트러스",
   },
 ];
 

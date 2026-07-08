@@ -12,7 +12,7 @@ const GROUP_LABEL: Record<FixtureType, string> = {
   strobe: "스트로브 (LED Strobe)",
   hazer: "헤이저",
   light: "광원 (Light)",
-  bar: "LED 바 (Bar)",
+  bar: "트러스 바 (Truss)",
   wall: "반사 벽 (Wall)",
   floor: "반사 바닥 (Floor)",
 };

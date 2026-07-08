@@ -144,6 +144,7 @@ interface SceneState extends Snapshot {
 const DEFAULT_COLOR: Partial<Record<FixtureType, string>> = {
   wall: "#0d0d12",
   floor: "#151515",
+  bar: "#3a3a3a", // 트러스 프레임 금속색
 };
 
 const defaultAngle = (t: FixtureType) => (t === "par" ? 4 : 25);
@@ -163,8 +164,8 @@ const initialList: FixtureRuntime[] = FIXTURES_CONFIG.map((c) => ({
   rotation: c.rotation ?? [0, 0, 0],
   scale: [1, 1, 1],
   mount: c.mount,
-  // 배치형 광원·LED 바는 기본 점등 상태
-  on: c.type === "light" || c.type === "bar",
+  // 배치형 광원만 기본 점등 (bar는 구조물이라 on 무관)
+  on: c.type === "light",
   dimmer: 1,
   color: DEFAULT_COLOR[c.type] ?? "#ffffff",
   pan: 270,
@@ -234,8 +235,8 @@ function defaultObject(type: FixtureType, id: string, name: string): FixtureRunt
     base.on = true; // 광원은 추가 즉시 점등
   }
   if (type === "bar") {
-    base.position = [0, 3.2, 1.2];
-    base.on = true; // LED 바도 추가 즉시 점등
+    // 트러스 프레임: 발판이 바닥에 닿도록 중심을 높이 절반에 둔다 (BAR_HEIGHT/2 ≈ 2.35)
+    base.position = [0, 2.35, 0];
   }
   return base;
 }

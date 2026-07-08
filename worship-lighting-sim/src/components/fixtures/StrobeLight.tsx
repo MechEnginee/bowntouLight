@@ -11,12 +11,14 @@ interface Props {
   on: boolean;
   dimmer: number;
   rate: number; // 플래시 속도(Hz), 0 = 상시 점등
+  color: string; // 발광/플래시 색
 }
 
 const bodyMat = { color: "#141416", metalness: 0.4, roughness: 0.6 };
 const FLASH_DUTY = 0.14; // 한 주기 중 발광 비율
+const OFF_COLOR = new THREE.Color("#262626");
 
-export function StrobeLight({ on, dimmer, rate }: Props) {
+export function StrobeLight({ on, dimmer, rate, color }: Props) {
   const lightRef = useRef<THREE.SpotLight>(null);
   // 스포트라이트가 패널 정면(+Z)을 향하도록 target을 자식으로 붙인다
   const target = useMemo(() => new THREE.Object3D(), []);
@@ -37,9 +39,10 @@ export function StrobeLight({ on, dimmer, rate }: Props) {
       else level = (clock.elapsedTime * rate) % 1 < FLASH_DUTY ? 1 : 0.02;
     }
     const v = level * dimmer;
-    // 꺼짐: 어두운 회색 렌즈 / 켜짐: 흰색 발광
-    stripMat.color.setScalar(0.15 + v * 0.85);
+    // 꺼짐: 어두운 회색 렌즈 / 켜짐: 지정 색으로 발광
+    stripMat.color.copy(OFF_COLOR).lerp(new THREE.Color(color), v);
     if (lightRef.current) {
+      lightRef.current.color.set(color);
       // spotLight는 넓은 각도로 광량이 퍼지므로 pointLight보다 강도를 높인다
       lightRef.current.intensity = v * 60;
     }
@@ -85,7 +88,6 @@ export function StrobeLight({ on, dimmer, rate }: Props) {
         distance={9}
         decay={1.2}
         intensity={0}
-        color="#ffffff"
       />
     </group>
   );

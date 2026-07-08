@@ -1,66 +1,47 @@
 // components/fixtures/Bar.tsx
-// LED 바 (가로형 워시 조명) — 긴 막대 본체 + 전면 발광 스트립 + 앞으로 퍼지는 넓은 빛.
-// on/dimmer/color 조절. 기본 방향은 정면(+Z). 회전 기즈모로 방향 변경 가능.
-
-import { useEffect, useMemo, useRef } from "react";
-import * as THREE from "three";
+// 트러스 바(설치용 기둥+가로바 구조물) — 조명을 매다는 골포스트형 프레임.
+//  - 상단 가로 빔 + 좌우 수직 기둥(+ 바닥 발판). 발광하지 않는 구조물.
+//  - color = 프레임 재질색. 크기는 scale로 조절.
+// 그룹 원점은 프레임 중심(y=0이 중앙). 위치 y = 높이/2 이면 발판이 바닥(y=0)에 닿는다.
 
 interface Props {
-  on: boolean;
-  dimmer: number;
   color: string;
 }
 
-const bodyMat = { color: "#141416", metalness: 0.4, roughness: 0.6 };
-const LENGTH = 1.6; // 바 가로 길이
-const CELL = 8; // 발광 셀 개수
+export const BAR_WIDTH = 10; // 기본 가로 폭
+export const BAR_HEIGHT = 4.7; // 기본 높이
+const T = 0.2; // 빔 두께
+const LEG = 0.16; // 기둥 두께
 
-export function Bar({ on, dimmer, color }: Props) {
-  const lightRef = useRef<THREE.SpotLight>(null);
-  const target = useMemo(() => new THREE.Object3D(), []);
-  useEffect(() => {
-    if (lightRef.current) lightRef.current.target = target;
-  }, [target]);
-
-  const cells = useMemo(
-    () =>
-      Array.from({ length: CELL }, (_, i) => -LENGTH / 2 + (LENGTH / CELL) * (i + 0.5)),
-    [],
-  );
-
-  const emissive = on ? Math.max(0.4, dimmer * 2.2) : 0.04;
-
+export function Bar({ color }: Props) {
+  const mat = { color, metalness: 0.6, roughness: 0.45 };
+  const halfW = BAR_WIDTH / 2;
+  const halfH = BAR_HEIGHT / 2;
   return (
     <group>
-      {/* 본체 */}
-      <mesh castShadow>
-        <boxGeometry args={[LENGTH, 0.14, 0.12]} />
-        <meshStandardMaterial {...bodyMat} />
+      {/* 상단 가로 빔 */}
+      <mesh position={[0, halfH, 0]} castShadow receiveShadow>
+        <boxGeometry args={[BAR_WIDTH + T, T, T]} />
+        <meshStandardMaterial {...mat} />
       </mesh>
-      {/* 전면 발광 셀 (정면 +Z) */}
-      {cells.map((x, i) => (
-        <mesh key={i} position={[x, 0, 0.062]}>
-          <planeGeometry args={[LENGTH / CELL - 0.03, 0.1]} />
-          <meshStandardMaterial
-            color="#0a0a0a"
-            emissive={color}
-            emissiveIntensity={emissive}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-      {/* 앞으로 퍼지는 넓은 워시 */}
-      <primitive object={target} position={[0, 0, 3]} />
-      <spotLight
-        ref={lightRef}
-        position={[0, 0, 0.07]}
-        angle={Math.PI / 2.4}
-        penumbra={0.8}
-        distance={12}
-        decay={1.3}
-        intensity={on ? dimmer * 25 : 0}
-        color={color}
-      />
+      {/* 좌우 수직 기둥 */}
+      <mesh position={[-halfW, 0, 0]} castShadow>
+        <boxGeometry args={[LEG, BAR_HEIGHT, LEG]} />
+        <meshStandardMaterial {...mat} />
+      </mesh>
+      <mesh position={[halfW, 0, 0]} castShadow>
+        <boxGeometry args={[LEG, BAR_HEIGHT, LEG]} />
+        <meshStandardMaterial {...mat} />
+      </mesh>
+      {/* 바닥 발판 */}
+      <mesh position={[-halfW, -halfH + 0.02, 0]} castShadow>
+        <boxGeometry args={[0.5, 0.04, 0.5]} />
+        <meshStandardMaterial {...mat} />
+      </mesh>
+      <mesh position={[halfW, -halfH + 0.02, 0]} castShadow>
+        <boxGeometry args={[0.5, 0.04, 0.5]} />
+        <meshStandardMaterial {...mat} />
+      </mesh>
     </group>
   );
 }

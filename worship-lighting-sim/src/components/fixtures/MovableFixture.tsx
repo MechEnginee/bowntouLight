@@ -5,7 +5,8 @@
 //  - Ctrl+좌클릭       → 개별 토글
 //  - Shift+좌클릭      → 범위 선택
 //  - 우클릭            → (선택에 포함돼 있으면) 선택 전체 On, 아니면 이 픽스처만 선택+On
-// 벽/바닥(Surface)은 뷰포트 클릭 불가(마퀴 보호) — 좌측 목록에서 선택한다.
+// 벽/바닥(Surface)은 화면을 크게 덮으므로 group에 onClick을 달지 않는다(마퀴 드래그 보호).
+// 대신 group.userData.fixtureId 로 표시해 두면 App이 클릭(작은 드래그) 시 직접 선택한다.
 
 import { useSceneStore } from "../../store/scene-store";
 import { SURFACE_SIZE } from "../../config/fixtures.config";
@@ -15,7 +16,7 @@ import { StrobeLight } from "./StrobeLight";
 import { Hazer } from "./Hazer";
 import { Surface } from "./Surface";
 import { SceneLight } from "./SceneLight";
-import { Bar } from "./Bar";
+import { Bar, BAR_WIDTH, BAR_HEIGHT } from "./Bar";
 
 export function MovableFixture({ id }: { id: string }) {
   const f = useSceneStore((s) => s.fixtures[id]);
@@ -56,7 +57,9 @@ export function MovableFixture({ id }: { id: string }) {
       );
       break;
     case "strobe":
-      visual = <StrobeLight on={f.on} dimmer={f.dimmer} rate={f.strobeRate} />;
+      visual = (
+        <StrobeLight on={f.on} dimmer={f.dimmer} rate={f.strobeRate} color={f.color} />
+      );
       break;
     case "hazer":
       visual = <Hazer on={f.on} />;
@@ -69,11 +72,11 @@ export function MovableFixture({ id }: { id: string }) {
       visual = <SceneLight on={f.on} dimmer={f.dimmer} color={f.color} />;
       break;
     case "bar":
-      visual = <Bar on={f.on} dimmer={f.dimmer} color={f.color} />;
+      visual = <Bar color={f.color} />;
       break;
   }
 
-  // 선택 표시 크기: 표면은 판 크기에 맞춘 얇은 박스, 그 외는 0.7m 큐브
+  // 선택 표시 크기: 표면/트러스는 구조 크기에 맞춘 박스, 그 외는 0.7m 큐브
   const isSurface = f.type === "wall" || f.type === "floor";
   const indicatorArgs: [number, number, number] = isSurface
     ? [
@@ -81,31 +84,41 @@ export function MovableFixture({ id }: { id: string }) {
         SURFACE_SIZE[f.type as "wall" | "floor"][1] + 0.3,
         0.25,
       ]
-    : [0.7, 0.7, 0.7];
+    : f.type === "bar"
+      ? [BAR_WIDTH + 0.5, BAR_HEIGHT + 0.5, 0.5]
+      : [0.7, 0.7, 0.7];
+
+  // 표면은 group에 포인터 핸들러를 달지 않는다(마퀴 드래그 보호). App이 userData로 클릭 선택.
+  const handlers = isSurface
+    ? {}
+    : {
+        onClick: (e: import("@react-three/fiber").ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          const n = e.nativeEvent as MouseEvent;
+          const s = useSceneStore.getState();
+          if (n.shiftKey) s.rangeSelect(id);
+          else if (n.ctrlKey || n.metaKey) s.toggleSelect(id);
+          else s.selectSingle(id);
+        },
+        onContextMenu: (e: import("@react-three/fiber").ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          const s = useSceneStore.getState();
+          if (s.selectedIds.includes(id)) {
+            s.update(s.selectedIds, { on: true });
+          } else {
+            s.selectSingle(id);
+            s.update([id], { on: true });
+          }
+        },
+      };
 
   return (
     <group
       position={f.position}
       rotation={f.rotation}
       scale={f.scale}
-      onClick={(e) => {
-        e.stopPropagation();
-        const n = e.nativeEvent as MouseEvent;
-        const s = useSceneStore.getState();
-        if (n.shiftKey) s.rangeSelect(id);
-        else if (n.ctrlKey || n.metaKey) s.toggleSelect(id);
-        else s.selectSingle(id);
-      }}
-      onContextMenu={(e) => {
-        e.stopPropagation();
-        const s = useSceneStore.getState();
-        if (s.selectedIds.includes(id)) {
-          s.update(s.selectedIds, { on: true });
-        } else {
-          s.selectSingle(id);
-          s.update([id], { on: true });
-        }
-      }}
+      userData={{ fixtureId: id, isSurface }}
+      {...handlers}
     >
       {visual}
       {selected && (

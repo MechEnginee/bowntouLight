@@ -168,24 +168,33 @@ export function ControlPanel() {
   const allPar = selected.every((f) => f.type === "par");
   const allMoving = selected.every((f) => f.type === "movingHead");
   const isStrobe = selected.every((f) => f.type === "strobe");
+  // 트러스 바는 구조물 — 프레임색만 있고 밝기/On·Off 없음
+  const isStructural = selected.every(
+    (f) => f.type === "wall" || f.type === "floor" || f.type === "bar",
+  );
   const isSurface = selected.every(
     (f) => f.type === "wall" || f.type === "floor",
   );
-  // 광원·LED 바는 RGB 색 입력을 쓴다
-  const isLight = selected.every((f) => f.type === "light" || f.type === "bar");
-  // 색을 가진 오브젝트: 빔(무빙/미니빔)·광원·LED 바·벽/바닥
+  const isLight = selected.every((f) => f.type === "light");
+  // 색을 가진 오브젝트: 빔(무빙/미니빔)·스트로브·광원·트러스 바·벽/바닥
   const hasColor = selected.every(
     (f) =>
       f.type === "movingHead" ||
       f.type === "par" ||
+      f.type === "strobe" ||
       f.type === "wall" ||
       f.type === "floor" ||
       f.type === "light" ||
       f.type === "bar",
   );
-  const useRgbColor = isSurface || isLight;
+  // 벽·바닥·광원·트러스 바는 RGB 입력
+  const useRgbColor = isStructural || isLight;
   const hasDimmer = selected.every(
-    (f) => f.type !== "hazer" && f.type !== "wall" && f.type !== "floor",
+    (f) =>
+      f.type !== "hazer" &&
+      f.type !== "wall" &&
+      f.type !== "floor" &&
+      f.type !== "bar",
   );
   const allOn = selected.every((f) => f.on);
   const multi = selected.length > 1;
@@ -208,8 +217,8 @@ export function ControlPanel() {
           : `${primary.mount} · (${primary.position.map((n) => n.toFixed(1)).join(", ")})`}
       </div>
 
-      {/* On/Off (선택 전체) — 표면은 해당 없음 */}
-      {!isSurface && (
+      {/* On/Off (선택 전체) — 구조물(벽/바닥/트러스)은 해당 없음 */}
+      {!isStructural && (
         <button
           onClick={() => update(selectedIds, { on: !allOn })}
           style={{
@@ -299,7 +308,9 @@ export function ControlPanel() {
               ? "표면색 (RGB)"
               : isLight
                 ? "광원색 (RGB)"
-                : "색상 (Color)"}
+                : isStructural
+                  ? "프레임색 (RGB)"
+                  : "색상 (Color)"}
           </div>
           {useRgbColor ? (
             <RgbRow
