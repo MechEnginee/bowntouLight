@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { useSceneStore, type Vec3 } from "../../store/scene-store";
 import { NumberField } from "./NumberField";
 import { RgbRow } from "./RgbRow";
+import { EyeDropperButton } from "./EyeDropperButton";
 import { hexToRgb, rgbToHex } from "./color-utils";
 
 function Slider({
@@ -320,6 +321,7 @@ export function ControlPanel() {
                 rgb[ch] = v;
                 update(selectedIds, { color: rgbToHex(rgb) });
               }}
+              onPickAll={(rgb) => update(selectedIds, { color: rgbToHex(rgb) })}
             />
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -335,9 +337,12 @@ export function ControlPanel() {
                   cursor: "pointer",
                 }}
               />
-              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#b0b0c0" }}>
+              <span style={{ fontFamily: "monospace", fontSize: 13, color: "#b0b0c0", flex: 1 }}>
                 {primary.color.toUpperCase()}
               </span>
+              <EyeDropperButton
+                onPick={(hex) => update(selectedIds, { color: hex })}
+              />
             </div>
           )}
         </div>

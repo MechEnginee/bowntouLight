@@ -254,7 +254,11 @@ export function ScenePanel() {
           {/* 배경색 */}
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #2a2a40" }}>
             <div style={labelStyle}>배경색 (RGB)</div>
-            <RgbRow value={backgroundColor} onChange={(ch, v) => setBackgroundChannel(ch, v)} />
+            <RgbRow
+              value={backgroundColor}
+              onChange={(ch, v) => setBackgroundChannel(ch, v)}
+              onPickAll={(rgb) => rgb.forEach((v, i) => setBackgroundChannel(i as 0 | 1 | 2, v))}
+            />
           </div>
         </div>
       )}
