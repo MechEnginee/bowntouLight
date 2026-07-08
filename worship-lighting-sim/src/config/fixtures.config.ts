@@ -10,7 +10,8 @@ export type FixtureType =
   | "hazer"
   | "wall"
   | "floor"
-  | "light";
+  | "light"
+  | "bar";
 
 export interface FixtureConfig {
   id: string;
@@ -157,6 +158,24 @@ const sceneLights: FixtureConfig[] = [
   },
 ];
 
+// LED 바 (가로형 워시 조명) — 앞으로 넓게 퍼지는 라인 라이트. 프런트 트러스에 2개.
+const bars: FixtureConfig[] = [
+  {
+    id: "bar-1",
+    type: "bar",
+    position: [-2.5, 3.2, 1.2],
+    baseAddress: -1,
+    mount: "프런트 트러스",
+  },
+  {
+    id: "bar-2",
+    type: "bar",
+    position: [2.5, 3.2, 1.2],
+    baseAddress: -1,
+    mount: "프런트 트러스",
+  },
+];
+
 export const FIXTURES_CONFIG: FixtureConfig[] = [
   ...movingHeads,
   ...parLights,
@@ -164,4 +183,5 @@ export const FIXTURES_CONFIG: FixtureConfig[] = [
   hazer,
   ...surfaces,
   ...sceneLights,
+  ...bars,
 ];

@@ -171,15 +171,17 @@ export function ControlPanel() {
   const isSurface = selected.every(
     (f) => f.type === "wall" || f.type === "floor",
   );
-  const isLight = selected.every((f) => f.type === "light");
-  // 색을 가진 오브젝트: 빔(무빙/미니빔)·광원·벽/바닥. 벽·바닥·광원은 RGB로 입력
+  // 광원·LED 바는 RGB 색 입력을 쓴다
+  const isLight = selected.every((f) => f.type === "light" || f.type === "bar");
+  // 색을 가진 오브젝트: 빔(무빙/미니빔)·광원·LED 바·벽/바닥
   const hasColor = selected.every(
     (f) =>
       f.type === "movingHead" ||
       f.type === "par" ||
       f.type === "wall" ||
       f.type === "floor" ||
-      f.type === "light",
+      f.type === "light" ||
+      f.type === "bar",
   );
   const useRgbColor = isSurface || isLight;
   const hasDimmer = selected.every(

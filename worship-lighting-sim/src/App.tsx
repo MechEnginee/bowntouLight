@@ -6,7 +6,7 @@
 //         Ctrl+Z=실행취소 · Ctrl+Shift+Z 또는 Ctrl+Y=다시실행
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import type { RootState } from "@react-three/fiber";
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import * as THREE from "three";
@@ -15,8 +15,7 @@ import { FixtureGroup } from "./components/fixtures/FixtureGroup";
 import { SelectionControls } from "./components/scene/SelectionControls";
 import { FixtureList } from "./components/ui/FixtureList";
 import { ControlPanel } from "./components/ui/ControlPanel";
-import { NumberField } from "./components/ui/NumberField";
-import { RgbRow } from "./components/ui/RgbRow";
+import { ScenePanel } from "./components/ui/ScenePanel";
 import { useSceneStore } from "./store/scene-store";
 
 interface Rect {
@@ -51,56 +50,48 @@ function SceneBackground() {
   return <color attach="background" args={[r / 255, g / 255, b / 255]} />;
 }
 
+/** 개발자 통계 프로브 — Canvas 내부에서 FPS·총 폴리곤 수를 0.25초마다 샘플링해 콜백.
+ * 폴리곤은 씬 그래프를 순회해 전체 삼각형 수를 직접 합산(렌더러 통계에 의존하지 않음). */
+function StatsProbe({ onSample }: { onSample: (fps: number, tris: number) => void }) {
+  const acc = useRef({ frames: 0, time: 0, last: performance.now(), primed: false });
+  useFrame(({ scene }) => {
+    const a = acc.current;
+    const now = performance.now();
+    // 마운트 직후 첫 프레임의 큰 공백은 건너뛰어 FPS 왜곡 방지
+    if (!a.primed) {
+      a.primed = true;
+      a.last = now;
+      return;
+    }
+    a.frames += 1;
+    a.time += now - a.last;
+    a.last = now;
+    if (a.time >= 250) {
+      let tris = 0;
+      scene.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.visible) return;
+        const g = mesh.geometry;
+        if (!g) return;
+        if (g.index) tris += g.index.count / 3;
+        else if (g.attributes.position) tris += g.attributes.position.count / 3;
+      });
+      onSample(Math.round((a.frames * 1000) / a.time), Math.round(tris));
+      a.frames = 0;
+      a.time = 0;
+    }
+  });
+  return null;
+}
+
 export default function App() {
   const transformMode = useSceneStore((s) => s.transformMode);
-  const sceneBrightness = useSceneStore((s) => s.sceneBrightness);
-  const setSceneBrightness = useSceneStore((s) => s.setSceneBrightness);
-  const lightPosition = useSceneStore((s) => s.lightPosition);
-  const setLightPosition = useSceneStore((s) => s.setLightPosition);
-  const backgroundColor = useSceneStore((s) => s.backgroundColor);
-  const setBackgroundChannel = useSceneStore((s) => s.setBackgroundChannel);
-  const sceneName = useSceneStore((s) => s.sceneName);
-  const setSceneName = useSceneStore((s) => s.setSceneName);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // ─── 씬 JSON 내보내기 ───
-  const handleExport = () => {
-    const data = useSceneStore.getState().exportScene();
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    // 파일시스템 금지 문자만 치환 (한글 등은 보존)
-    const safe =
-      (data.sceneName || "scene").replace(/[\\/:*?"<>|]+/g, "_").trim() || "scene";
-    a.href = url;
-    a.download = `${safe}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // ─── 씬 JSON 불러오기 (전체 교체) ───
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // 같은 파일 재선택 허용
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(String(reader.result));
-        const res = useSceneStore.getState().importScene(data);
-        if (!res.ok) alert(`불러오기 실패: ${res.error}`);
-      } catch {
-        alert("불러오기 실패: JSON 파싱 오류");
-      }
-    };
-    reader.readAsText(file);
-  };
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
   const [marquee, setMarquee] = useState<Rect | null>(null);
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState({ fps: 0, tris: 0 });
 
   // ─── 전역 키보드 단축키 ───
   useEffect(() => {
@@ -131,6 +122,12 @@ export default function App() {
         st.paste();
       } else if (e.key === "Delete") {
         if (st.selectedIds.length > 0) st.removeObjects(st.selectedIds);
+      } else if (e.key === "Escape") {
+        st.clearSelection();
+      } else if (mod && (e.key === "`" || e.code === "Backquote")) {
+        // Ctrl+` : 개발자 통계(FPS·폴리곤) 토글
+        e.preventDefault();
+        setShowStats((v) => !v);
       } else if (e.key === "1") {
         st.setTransformMode("translate");
       } else if (e.key === "2") {
@@ -294,6 +291,9 @@ export default function App() {
         >
           <SceneBackground />
           <SceneLights />
+          {showStats && (
+            <StatsProbe onSample={(fps, tris) => setStats({ fps, tris })} />
+          )}
 
           <Stage />
           <FixtureGroup />
@@ -325,6 +325,29 @@ export default function App() {
           </GizmoHelper>
         </Canvas>
 
+        {/* 개발자 통계 (Ctrl+` 토글) — 우상단 */}
+        {showStats && (
+          <div
+            style={{
+              position: "absolute",
+              top: 12,
+              right: 12,
+              color: "#7bff9b",
+              font: "12px/1.5 monospace",
+              background: "#0a0a0acc",
+              border: "1px solid #2a4a2a",
+              padding: "6px 10px",
+              borderRadius: 6,
+              pointerEvents: "none",
+              textAlign: "right",
+              minWidth: 110,
+            }}
+          >
+            <div>FPS: {stats.fps}</div>
+            <div>폴리곤: {stats.tris.toLocaleString()}</div>
+          </div>
+        )}
+
         {/* 마퀴 선택 박스 오버레이 */}
         {marquee && (
           <div
@@ -341,160 +364,8 @@ export default function App() {
           />
         )}
 
-        {/* 좌상단: 씬 전역 밝기 + 광원 위치 조절 (인터랙티브) */}
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: 12,
-            width: 220,
-            color: "#c8c8d0",
-            font: "12px/1.4 monospace",
-            background: "#1a1a2ee6",
-            padding: "10px 12px",
-            borderRadius: 6,
-            border: "1px solid #2a2a40",
-          }}
-        >
-          {/* 씬 명칭 (수정 가능) */}
-          <div style={{ color: "#7a7a9a", fontSize: 10, marginBottom: 3 }}>씬 이름</div>
-          <input
-            type="text"
-            value={sceneName}
-            onChange={(e) => setSceneName(e.target.value)}
-            placeholder="씬 이름"
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              background: "#12121f",
-              border: "1px solid #333350",
-              borderRadius: 4,
-              color: "#E0E0E0",
-              fontSize: 13,
-              fontWeight: 700,
-              padding: "5px 7px",
-              marginBottom: 8,
-            }}
-          />
-
-          {/* 내보내기 / 불러오기 */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            <button
-              onClick={handleExport}
-              style={{
-                flex: 1,
-                padding: "5px",
-                borderRadius: 4,
-                border: "1px solid #3a5a3a",
-                background: "#1a2a1a",
-                color: "#9ad09a",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-              내보내기
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                flex: 1,
-                padding: "5px",
-                borderRadius: 4,
-                border: "1px solid #3a3a5a",
-                background: "#1a1a2a",
-                color: "#9ab8e0",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-              불러오기
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json,.json"
-              onChange={handleImportFile}
-              style={{ display: "none" }}
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 5,
-              paddingTop: 8,
-              borderTop: "1px solid #2a2a40",
-            }}
-          >
-            <span style={{ color: "#4A90D9", fontWeight: 700 }}>Scene 밝기</span>
-            <NumberField
-              value={sceneBrightness * 100}
-              onCommit={(v) =>
-                setSceneBrightness(Math.max(0, Math.min(200, v)) / 100)
-              }
-              suffix="%"
-              decimals={0}
-              width={48}
-              align="right"
-            />
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={200}
-            value={sceneBrightness * 100}
-            onChange={(e) => setSceneBrightness(parseFloat(e.target.value) / 100)}
-            style={{ width: "100%", accentColor: "#4A90D9" }}
-          />
-
-          <div
-            style={{
-              marginTop: 8,
-              paddingTop: 8,
-              borderTop: "1px solid #2a2a40",
-            }}
-          >
-            <div style={{ color: "#7a7a9a", marginBottom: 4 }}>태양광 위치 (Sun)</div>
-            <div style={{ display: "flex", gap: 5 }}>
-              {(["X", "Y", "Z"] as const).map((axisLabel, axis) => (
-                <div key={axis} style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      color: "#555570",
-                      textAlign: "center",
-                      marginBottom: 1,
-                    }}
-                  >
-                    {axisLabel}
-                  </div>
-                  <NumberField
-                    value={lightPosition[axis]}
-                    onCommit={(v) => setLightPosition(axis as 0 | 1 | 2, v)}
-                    decimals={1}
-                    width="100%"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              paddingTop: 8,
-              borderTop: "1px solid #2a2a40",
-            }}
-          >
-            <div style={{ color: "#7a7a9a", marginBottom: 4 }}>배경색 (RGB)</div>
-            <RgbRow
-              value={backgroundColor}
-              onChange={(ch, v) => setBackgroundChannel(ch, v)}
-            />
-          </div>
-        </div>
+        {/* 좌상단: 씬 컨트롤 (이동·접기 가능) */}
+        <ScenePanel />
 
         <div
           style={{
@@ -515,7 +386,9 @@ export default function App() {
           <br />
           1/2/3=이동/회전/크기 · Ctrl+C/V=복사/붙여넣기 · Del=삭제
           <br />
-          Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행
+          Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행 · Esc=선택해제
+          <br />
+          Ctrl+` = 개발자 통계(FPS·폴리곤)
           <br />
           <span style={{ color: "#4A90D9" }}>
             기즈모: {MODE_LABEL[transformMode]}

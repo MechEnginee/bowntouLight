@@ -131,6 +131,8 @@ interface SceneState extends Snapshot {
   // 오브젝트 관리
   addObject: (type: FixtureType) => void;
   removeObjects: (ids: string[]) => void;
+  /** 표시 이름(name) 변경 — 목록 더블클릭 인라인 편집 */
+  renameObject: (id: string, name: string) => void;
   copySelection: () => void;
   paste: () => void;
 
@@ -161,8 +163,8 @@ const initialList: FixtureRuntime[] = FIXTURES_CONFIG.map((c) => ({
   rotation: c.rotation ?? [0, 0, 0],
   scale: [1, 1, 1],
   mount: c.mount,
-  // 배치형 광원은 기본 점등 상태
-  on: c.type === "light",
+  // 배치형 광원·LED 바는 기본 점등 상태
+  on: c.type === "light" || c.type === "bar",
   dimmer: 1,
   color: DEFAULT_COLOR[c.type] ?? "#ffffff",
   pan: 270,
@@ -184,6 +186,7 @@ const ID_PREFIX: Record<FixtureType, string> = {
   wall: "wall",
   floor: "floor",
   light: "light",
+  bar: "bar",
 };
 
 /** 타입 접두어 기준으로 다음 표시 이름 생성 (예: moving-9) — 기존 name들과 겹치지 않게 */
@@ -229,6 +232,10 @@ function defaultObject(type: FixtureType, id: string, name: string): FixtureRunt
   if (type === "light") {
     base.position = [0, 6, 4];
     base.on = true; // 광원은 추가 즉시 점등
+  }
+  if (type === "bar") {
+    base.position = [0, 3.2, 1.2];
+    base.on = true; // LED 바도 추가 즉시 점등
   }
   return base;
 }
@@ -547,6 +554,13 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         selectedIds: [id],
         anchorId: id,
       };
+    }),
+
+  renameObject: (id, name) =>
+    set((s) => {
+      if (!s.fixtures[id]) return {};
+      const hist = record(s, null);
+      return { ...hist, fixtures: patch(s.fixtures, id, { name }) };
     }),
 
   removeObjects: (ids) =>

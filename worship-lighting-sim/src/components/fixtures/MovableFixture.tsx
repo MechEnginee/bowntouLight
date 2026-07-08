@@ -15,6 +15,7 @@ import { StrobeLight } from "./StrobeLight";
 import { Hazer } from "./Hazer";
 import { Surface } from "./Surface";
 import { SceneLight } from "./SceneLight";
+import { Bar } from "./Bar";
 
 export function MovableFixture({ id }: { id: string }) {
   const f = useSceneStore((s) => s.fixtures[id]);
@@ -66,6 +67,9 @@ export function MovableFixture({ id }: { id: string }) {
       break;
     case "light":
       visual = <SceneLight on={f.on} dimmer={f.dimmer} color={f.color} />;
+      break;
+    case "bar":
+      visual = <Bar on={f.on} dimmer={f.dimmer} color={f.color} />;
       break;
   }
 

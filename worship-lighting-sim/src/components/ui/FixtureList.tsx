@@ -2,6 +2,7 @@
 // 클릭: 단일 선택 / Ctrl+클릭: 토글 / Shift+클릭: 범위 선택 (Windows 탐색기 UX)
 // 항목을 캔버스로 드래그&드롭하면 그 픽스처를 해당 지점으로 이동.
 
+import { useState } from "react";
 import { useSceneStore } from "../../store/scene-store";
 import type { FixtureType } from "../../config/fixtures.config";
 
@@ -10,9 +11,10 @@ const GROUP_LABEL: Record<FixtureType, string> = {
   par: "미니빔 (LED Mini Beam 251)",
   strobe: "스트로브 (LED Strobe)",
   hazer: "헤이저",
+  light: "광원 (Light)",
+  bar: "LED 바 (Bar)",
   wall: "반사 벽 (Wall)",
   floor: "반사 바닥 (Floor)",
-  light: "광원 (Light)",
 };
 
 const TYPE_ORDER: FixtureType[] = [
@@ -21,17 +23,22 @@ const TYPE_ORDER: FixtureType[] = [
   "strobe",
   "hazer",
   "light",
+  "bar",
   "wall",
   "floor",
 ];
 
 /** 목록에서 바로 새 오브젝트를 추가할 수 있는 타입 */
-const ADDABLE: FixtureType[] = ["light", "wall", "floor"];
+const ADDABLE: FixtureType[] = ["light", "bar", "wall", "floor"];
 
 export function FixtureList() {
   const fixtures = useSceneStore((s) => s.fixtures);
   const order = useSceneStore((s) => s.order);
   const selectedIds = useSceneStore((s) => s.selectedIds);
+
+  // 더블클릭 인라인 이름 편집 상태
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
 
   const idsByType = (t: FixtureType) =>
     order.filter((id) => fixtures[id].type === t);
@@ -41,6 +48,18 @@ export function FixtureList() {
     if (e.shiftKey) s.rangeSelect(id);
     else if (e.ctrlKey || e.metaKey) s.toggleSelect(id);
     else s.selectSingle(id);
+  };
+
+  const startEdit = (id: string) => {
+    setEditingId(id);
+    setDraft(fixtures[id]?.name ?? "");
+  };
+  const commitEdit = () => {
+    if (editingId) {
+      const name = draft.trim();
+      if (name) useSceneStore.getState().renameObject(editingId, name);
+    }
+    setEditingId(null);
   };
 
   return (
@@ -120,6 +139,8 @@ export function FixtureList() {
                     }
                   }}
                   onClick={(e) => handleClick(id, e)}
+                  onDoubleClick={() => startEdit(id)}
+                  title="더블클릭하여 이름 변경"
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -144,7 +165,32 @@ export function FixtureList() {
                       flex: "0 0 auto",
                     }}
                   />
-                  <span style={{ flex: 1 }}>{f.name}</span>
+                  {editingId === id ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={commitEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitEdit();
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        background: "#12121f",
+                        border: "1px solid #7bb3e8",
+                        borderRadius: 3,
+                        color: "#fff",
+                        fontSize: 13,
+                        padding: "1px 4px",
+                      }}
+                    />
+                  ) : (
+                    <span style={{ flex: 1 }}>{f.name}</span>
+                  )}
                 </div>
               );
             })}
