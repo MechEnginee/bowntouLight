@@ -16,7 +16,19 @@ import { SelectionControls } from "./components/scene/SelectionControls";
 import { FixtureList } from "./components/ui/FixtureList";
 import { ControlPanel } from "./components/ui/ControlPanel";
 import { ScenePanel } from "./components/ui/ScenePanel";
-import { useSceneStore } from "./store/scene-store";
+import { BAR_WIDTH, BAR_HEIGHT } from "./components/fixtures/Bar";
+import { SURFACE_SIZE } from "./config/fixtures.config";
+import { useSceneStore, type FixtureRuntime } from "./store/scene-store";
+
+/** 선택 판정용 로컬 바운딩 박스 크기 [w,h,d] — MovableFixture의 선택 표시 박스와 동일 */
+function fixtureBoxSize(f: FixtureRuntime): [number, number, number] {
+  if (f.type === "wall" || f.type === "floor") {
+    const [w, h] = SURFACE_SIZE[f.type];
+    return [w, h, 0.25];
+  }
+  if (f.type === "bar") return [BAR_WIDTH, BAR_HEIGHT, 0.5];
+  return [0.7, 0.7, 0.7];
+}
 
 interface Rect {
   x0: number;
@@ -277,19 +289,54 @@ export default function App() {
       return;
     }
 
+    // 방향에 따른 선택 방식 (CAD 관례):
+    //  - 오른쪽으로 드래그(x1 >= x0) = 포함(window): 오브젝트 전체가 박스 안일 때만
+    //  - 왼쪽으로 드래그(x1 <  x0) = 교차(crossing): 박스에 조금이라도 걸치면
+    const crossing = m.x1 < m.x0;
     const rect = st.gl.domElement.getBoundingClientRect();
     const fixtures = useSceneStore.getState().fixtures;
     const order = useSceneStore.getState().order;
     const v = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
     const inside: string[] = [];
+
     for (const id of order) {
-      const p = fixtures[id].position;
-      v.set(p[0], p[1], p[2]).project(st.camera);
-      const sx = (v.x * 0.5 + 0.5) * rect.width;
-      const sy = (-v.y * 0.5 + 0.5) * rect.height;
-      if (v.z < 1 && sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
-        inside.push(id);
+      const f = fixtures[id];
+      const [w, h, d] = fixtureBoxSize(f);
+      const hx = (w / 2) * f.scale[0];
+      const hy = (h / 2) * f.scale[1];
+      const hz = (d / 2) * f.scale[2];
+      q.setFromEuler(e.set(f.rotation[0], f.rotation[1], f.rotation[2]));
+
+      // 8개 코너를 화면에 투영해 스크린 바운딩 박스 계산
+      let bMinX = Infinity, bMaxX = -Infinity, bMinY = Infinity, bMaxY = -Infinity;
+      let anyFront = false;
+      for (let i = 0; i < 8; i++) {
+        v.set(
+          i & 1 ? hx : -hx,
+          i & 2 ? hy : -hy,
+          i & 4 ? hz : -hz,
+        )
+          .applyQuaternion(q)
+          .add(new THREE.Vector3(f.position[0], f.position[1], f.position[2]))
+          .project(st.camera);
+        if (v.z < 1) anyFront = true;
+        const sx = (v.x * 0.5 + 0.5) * rect.width;
+        const sy = (-v.y * 0.5 + 0.5) * rect.height;
+        bMinX = Math.min(bMinX, sx);
+        bMaxX = Math.max(bMaxX, sx);
+        bMinY = Math.min(bMinY, sy);
+        bMaxY = Math.max(bMaxY, sy);
       }
+      if (!anyFront) continue;
+
+      const hit = crossing
+        ? // 교차: 스크린 사각형이 마퀴와 겹치면
+          !(bMaxX < minX || bMinX > maxX || bMaxY < minY || bMinY > maxY)
+        : // 포함: 오브젝트 사각형이 마퀴 안에 완전히 들어오면
+          bMinX >= minX && bMaxX <= maxX && bMinY >= minY && bMaxY <= maxY;
+      if (hit) inside.push(id);
     }
     useSceneStore.getState().setSelection(inside, m.additive);
   };
@@ -374,21 +421,26 @@ export default function App() {
           </div>
         )}
 
-        {/* 마퀴 선택 박스 오버레이 */}
-        {marquee && (
-          <div
-            style={{
-              position: "absolute",
-              left: Math.min(marquee.x0, marquee.x1),
-              top: Math.min(marquee.y0, marquee.y1),
-              width: Math.abs(marquee.x1 - marquee.x0),
-              height: Math.abs(marquee.y1 - marquee.y0),
-              border: "1px solid #4A90D9",
-              background: "#4A90D933",
-              pointerEvents: "none",
-            }}
-          />
-        )}
+        {/* 마퀴 선택 박스 오버레이 — 오른쪽(포함)=파란 실선 / 왼쪽(교차)=초록 점선 */}
+        {marquee &&
+          (() => {
+            const crossing = marquee.x1 < marquee.x0;
+            const c = crossing ? "#4dff88" : "#4A90D9";
+            return (
+              <div
+                style={{
+                  position: "absolute",
+                  left: Math.min(marquee.x0, marquee.x1),
+                  top: Math.min(marquee.y0, marquee.y1),
+                  width: Math.abs(marquee.x1 - marquee.x0),
+                  height: Math.abs(marquee.y1 - marquee.y0),
+                  border: `1px ${crossing ? "dashed" : "solid"} ${c}`,
+                  background: crossing ? "#4dff8822" : "#4A90D933",
+                  pointerEvents: "none",
+                }}
+              />
+            );
+          })()}
 
         {/* 좌상단: 씬 컨트롤 (이동·접기 가능) */}
         <ScenePanel />
@@ -408,7 +460,7 @@ export default function App() {
         >
           휠=줌 · 우클릭=회전 · 휠클릭=이동
           <br />
-          클릭/Ctrl/Shift=선택 · 빈곳 드래그=박스선택 · 우클릭=On
+          클릭/Ctrl/Shift=선택 · 빈곳 드래그=박스선택(→완전포함/←걸침) · 우클릭=On
           <br />
           1/2/3=이동/회전/크기 · Ctrl+C/V=복사/붙여넣기 · Del=삭제
           <br />
