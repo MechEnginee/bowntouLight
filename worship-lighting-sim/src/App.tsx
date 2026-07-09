@@ -110,7 +110,7 @@ export default function App() {
   // 패널 크기 (좌/우 목록·제어패널 폭, 하단 콘솔 높이) — 경계를 드래그해 조절
   const [leftWidth, setLeftWidth] = useState(260);
   const [rightWidth, setRightWidth] = useState(260);
-  const [consoleHeight, setConsoleHeight] = useState(430);
+  const [consoleHeight, setConsoleHeight] = useState(480);
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
   // ─── 전역 키보드 단축키 ───

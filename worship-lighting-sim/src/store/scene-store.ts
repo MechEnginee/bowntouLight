@@ -423,11 +423,12 @@ const EFFECT_PRESET: Record<
   ShapeType,
   { size: number; beatsPerCycle: number; spread: number; direction: 1 | -1 }
 > = {
+  // spread(위상, 도/픽스처): 0=동시. dimmerWave는 생성 시 그룹 크기 기준 360/n으로 덮어씀(한 바퀴 파도).
   circle: { size: 30, beatsPerCycle: 4, spread: 0, direction: 1 },
   figure8: { size: 30, beatsPerCycle: 4, spread: 0, direction: 1 },
   pan: { size: 45, beatsPerCycle: 2, spread: 0, direction: 1 },
   tilt: { size: 25, beatsPerCycle: 2, spread: 0, direction: 1 },
-  dimmerWave: { size: 1, beatsPerCycle: 2, spread: 360, direction: 1 },
+  dimmerWave: { size: 1, beatsPerCycle: 4, spread: 0, direction: 1 },
 };
 
 // 탭 템포 타임스탬프 버퍼(런타임 전용)
@@ -627,6 +628,7 @@ function coerceEffects(raw: unknown, groups: FixtureGroupDef[]): EffectDef[] {
           : 4,
       spread: typeof o.spread === "number" && Number.isFinite(o.spread) ? clamp(o.spread, 0, 360) : 0,
       direction: o.direction === -1 ? -1 : 1,
+      step: o.step === true,
       running: o.running !== false,
     });
   }
@@ -1298,13 +1300,20 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     const group = s.groups.find((g) => g.id === groupId);
     if (!group || group.fixtureIds.length === 0) return;
     const preset = EFFECT_PRESET[shape];
+    // dimmerWave는 그룹 전체에 한 바퀴 파도가 흐르도록 위상 기본값 = 360/n
+    const spread =
+      shape === "dimmerWave"
+        ? Math.round(360 / Math.max(1, group.fixtureIds.length))
+        : preset.spread;
     const eff: EffectDef = {
       id: genId(),
       name: `${group.name} ${SHAPE_LABEL[shape]}`,
       groupId,
       shape,
       running: true,
+      step: false,
       ...preset,
+      spread,
     };
     set({ effects: [...s.effects, eff] });
     syncEffectEngine();

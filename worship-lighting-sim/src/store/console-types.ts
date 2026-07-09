@@ -58,10 +58,18 @@ export interface EffectDef {
   size: number;
   /** 한 사이클에 걸리는 박자 수 (작을수록 빠름). BPM과 동기 */
   beatsPerCycle: number;
-  /** 그룹 내 위상 분산(도) 0..360 — 클수록 물결처럼 번져 돈다 */
+  /**
+   * 위상(Phase) — 픽스처당 위상차(도) 0..360. 실기기 Titan Spread/Phase 모델.
+   *  - 0        = 전 픽스처 동시(같은 위상)
+   *  - 180      = 격간 분할(1,3,5 / 2,4,6 — 매 2번째마다 반복)
+   *  - 360/n    = 그룹 전체에 한 바퀴 파도(픽스처마다 한 칸씩)
+   *  일반적으로 K분할 = 360/K (예: 3분할=120°)
+   */
   spread: number;
   /** 진행 방향 (+1 정방향 / -1 역방향) */
   direction: 1 | -1;
+  /** dimmerWave 전용: 부드러운 사인 대신 딱딱 켜지는 순차 체이스(Step) 모드 */
+  step?: boolean;
   /** 실행 중 여부 */
   running: boolean;
 }

@@ -11,13 +11,21 @@ import type { EffectDef, LiveOffset } from "./console-types";
 
 const TAU = Math.PI * 2;
 const d2r = (d: number) => (d * Math.PI) / 180;
+const wrap = (x: number) => ((x % TAU) + TAU) % TAU;
+/** 두 각(rad) 사이 최단 거리 0..π */
+function angDist(a: number, b: number): number {
+  const d = Math.abs(wrap(a) - wrap(b));
+  return Math.min(d, TAU - d);
+}
 
 let rafHandle: number | null = null;
 let lastTime = 0;
 let beats = 0; // 누적 박자(위상 기준)
 
-function shapeOffset(effect: EffectDef, phase: number, acc: LiveOffset) {
+// effect: 이펙트 정의, base: 시간 위상(rad), phaseK: 이 픽스처의 위상 오프셋(rad)
+function shapeOffset(effect: EffectDef, base: number, phaseK: number, acc: LiveOffset) {
   const { shape, size } = effect;
+  const phase = base + phaseK;
   switch (shape) {
     case "circle":
       acc.pan += size * Math.sin(phase);
@@ -34,8 +42,17 @@ function shapeOffset(effect: EffectDef, phase: number, acc: LiveOffset) {
       acc.tilt += size * Math.sin(phase);
       break;
     case "dimmerWave": {
-      const wave01 = (Math.sin(phase) + 1) / 2; // 0..1
-      acc.dimMul *= 1 - size + size * wave01; // [1-size, 1]
+      if (effect.step) {
+        // Step(체이스): 이동하는 헤드(base)가 이 픽스처의 위상 슬롯(phaseK)을 지날 때만 풀 점등.
+        // 창 폭 = 위상 간격(phaseK 스텝)의 절반 → 한 번에 한 위상그룹만 켜짐.
+        const spreadRad = d2r(effect.spread);
+        const win = spreadRad > 0.001 ? spreadRad / 2 : Math.PI / 2;
+        const on = angDist(phaseK, base) < win;
+        acc.dimMul *= on ? 1 : 1 - size;
+      } else {
+        const wave01 = (Math.sin(phase) + 1) / 2; // 0..1
+        acc.dimMul *= 1 - size + size * wave01; // [1-size, 1]
+      }
       break;
     }
   }
@@ -54,15 +71,14 @@ function tick(now: number) {
     const group = state.groups.find((g) => g.id === eff.groupId);
     if (!group || group.fixtureIds.length === 0) continue;
     const ids = group.fixtureIds;
-    const n = ids.length;
-    const spreadRad = d2r(eff.spread);
+    const spreadRad = d2r(eff.spread); // 픽스처당 위상차 (Titan Phase 모델)
     const base = (TAU * beats) / Math.max(0.01, eff.beatsPerCycle) * eff.direction;
 
     ids.forEach((id, k) => {
       if (!state.fixtures[id]) return;
-      const phase = base + spreadRad * (n > 1 ? k / n : 0);
+      const phaseK = spreadRad * k;
       const acc = offsets[id] ?? (offsets[id] = { pan: 0, tilt: 0, dimMul: 1 });
-      shapeOffset(eff, phase, acc);
+      shapeOffset(eff, base, phaseK, acc);
     });
   }
 

@@ -425,7 +425,7 @@ function PlaybacksWindow() {
   return (
     <ScreenWindow
       title="Playbacks"
-      flex={1.4}
+      flex={1}
       bodyStyle={{ display: "flex", flexWrap: "wrap", alignContent: "flex-start", gap: 4 }}
     >
       {looks.map((l) => {
@@ -631,7 +631,14 @@ const SHAPE_MENU_LABEL: Record<ShapeType, string> = {
 
 function EffectRow({ eff }: { eff: EffectDef }) {
   const isDim = eff.shape === "dimmerWave";
+  const groupSize = useSceneStore(
+    (s) => s.groups.find((g) => g.id === eff.groupId)?.fixtureIds.length ?? 0,
+  );
   const set = (patch: Partial<EffectDef>) => useSceneStore.getState().updateEffect(eff.id, patch);
+  // 위상(spread)이 360을 정수로 나누면 몇 분할인지 표기 (180→2분할, 120→3분할 …)
+  const splitOf = (deg: number) => (deg > 0 && Math.abs(360 / deg - Math.round(360 / deg)) < 0.02 ? Math.round(360 / deg) : 0);
+  const curSplit = splitOf(eff.spread);
+  const waveDeg = groupSize > 1 ? Math.round(360 / groupSize) : 0; // 그룹 전체 한 바퀴 파도
   return (
     <div
       style={{
@@ -694,12 +701,61 @@ function EffectRow({ eff }: { eff: EffectDef }) {
         readout={`${eff.beatsPerCycle}박/회`}
       />
       <EffSlider
-        label="분산"
+        label="위상"
         value={eff.spread / 360}
         onChange={(t) => set({ spread: Math.round(t * 360) })}
-        readout={`${eff.spread}°`}
+        readout={curSplit ? `${eff.spread}° ${curSplit}분할` : `${eff.spread}°`}
       />
+      {/* 분할 프리셋 (실기기 Phase: 180=2분할, 120=3분할, 360/n=파도) + Step 토글 */}
+      <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 8.5, color: "#7f9ac4", width: 26 }}>분할</span>
+        <SplitBtn label="동시" active={eff.spread === 0} onClick={() => set({ spread: 0 })} />
+        <SplitBtn label="2" active={curSplit === 2} onClick={() => set({ spread: 180 })} />
+        <SplitBtn label="3" active={curSplit === 3} onClick={() => set({ spread: 120 })} />
+        {waveDeg > 0 && (
+          <SplitBtn label="파도" active={eff.spread === waveDeg} onClick={() => set({ spread: waveDeg })} />
+        )}
+        {isDim && (
+          <button
+            onClick={() => set({ step: !eff.step })}
+            title={eff.step ? "Step(딱딱 순차) → Wave(부드러운 파도)로" : "Wave → Step(딱딱 순차 체이스)으로"}
+            style={{
+              marginLeft: "auto",
+              fontSize: 8.5,
+              fontWeight: 700,
+              padding: "2px 7px",
+              borderRadius: 3,
+              border: "1px solid #33425f",
+              background: eff.step ? "linear-gradient(180deg,#4aa0ff,#1f6fd6)" : "#1b2338",
+              color: eff.step ? "#fff" : "#9ab8e0",
+              cursor: "pointer",
+            }}
+          >
+            {eff.step ? "STEP" : "WAVE"}
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function SplitBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize: 8.5,
+        fontWeight: 600,
+        padding: "2px 6px",
+        borderRadius: 3,
+        border: `1px solid ${active ? "#7ec4ff" : "#33425f"}`,
+        background: active ? "#3f6bb0" : "#1b2338",
+        color: active ? "#fff" : "#9ab8e0",
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -765,7 +821,7 @@ function EffSlider({
 function EffectsWindow() {
   const effects = useSceneStore((s) => s.effects);
   return (
-    <ScreenWindow title="Shapes and Effects" flex={1} bodyStyle={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <ScreenWindow title="Shapes and Effects" flex={1.5} bodyStyle={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {effects.length === 0 ? (
         <div style={{ color: "#5a6a88", fontSize: 9.5, lineHeight: 1.5, padding: 3 }}>
           그룹을 우클릭 → <b style={{ color: "#7f9ac4" }}>이펙트 추가</b>로
