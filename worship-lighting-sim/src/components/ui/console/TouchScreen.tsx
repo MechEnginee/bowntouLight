@@ -18,7 +18,7 @@
 import { useState } from "react";
 import { useSceneStore } from "../../../store/scene-store";
 import type { FixtureType } from "../../../config/fixtures.config";
-import type { FaderAssignment } from "../../../store/console-types";
+import type { FaderAssignment, ShapeType, EffectDef } from "../../../store/console-types";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 
 const SCREEN_BG = "#0d1322";
@@ -384,6 +384,13 @@ function GroupsWindow() {
                 useSceneStore.getState().assignFader(idx, { kind: "groupMaster", groupId: g.id });
               },
             },
+            {
+              label: "이펙트 추가",
+              submenu: EFFECT_SHAPES.map((sh) => ({
+                label: SHAPE_MENU_LABEL[sh],
+                onSelect: () => useSceneStore.getState().createEffect(g.id, sh),
+              })),
+            },
             { label: "삭제", danger: true, onSelect: () => useSceneStore.getState().deleteGroup(g.id) },
           ];
           return <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />;
@@ -611,6 +618,136 @@ function MenuColumn() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Shapes and Effects 창 — 셰이프 제너레이터. 실행 중 이펙트의 Size/Speed/Spread/방향 조절.
+// ─────────────────────────────────────────────────────────────────────────
+const EFFECT_SHAPES: ShapeType[] = ["circle", "figure8", "pan", "tilt", "dimmerWave"];
+const SHAPE_MENU_LABEL: Record<ShapeType, string> = {
+  circle: "원 (Circle)",
+  figure8: "8자 (Figure 8)",
+  pan: "좌우 (Pan)",
+  tilt: "상하 (Tilt)",
+  dimmerWave: "디머 웨이브",
+};
+
+function EffectRow({ eff }: { eff: EffectDef }) {
+  const isDim = eff.shape === "dimmerWave";
+  const set = (patch: Partial<EffectDef>) => useSceneStore.getState().updateEffect(eff.id, patch);
+  return (
+    <div
+      style={{
+        background: eff.running ? "#1d2c46" : "#161d2c",
+        border: `1px solid ${eff.running ? "#3f6bb0" : "#2a3a58"}`,
+        borderRadius: 4,
+        padding: "5px 6px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <button
+          onClick={() => useSceneStore.getState().toggleEffect(eff.id)}
+          title={eff.running ? "정지" : "실행"}
+          style={{
+            width: 20,
+            height: 18,
+            borderRadius: 3,
+            border: "1px solid #10233f",
+            background: eff.running ? "linear-gradient(180deg,#4aa0ff,#1f6fd6)" : "#2a2a30",
+            color: "#fff",
+            fontSize: 9,
+            cursor: "pointer",
+            flex: "0 0 auto",
+          }}
+        >
+          {eff.running ? "⏸" : "▶"}
+        </button>
+        <span style={{ fontSize: 10, color: "#dce8f8", fontWeight: 600, flex: 1, wordBreak: "keep-all" }}>
+          {eff.name}
+        </span>
+        <button
+          onClick={() => useSceneStore.getState().updateEffect(eff.id, { direction: eff.direction === 1 ? -1 : 1 })}
+          title="진행 방향 반전"
+          style={miniBtn}
+        >
+          {eff.direction === 1 ? "→" : "←"}
+        </button>
+        <button
+          onClick={() => useSceneStore.getState().removeEffect(eff.id)}
+          title="이펙트 삭제"
+          style={{ ...miniBtn, color: "#ff8578" }}
+        >
+          ✕
+        </button>
+      </div>
+      <EffSlider
+        label={isDim ? "깊이" : "크기"}
+        value={isDim ? eff.size : eff.size / 90}
+        onChange={(t) => set({ size: isDim ? t : Math.round(t * 90) })}
+        readout={isDim ? `${Math.round(eff.size * 100)}%` : `${eff.size}°`}
+      />
+      <EffSlider
+        label="속도"
+        // beatsPerCycle 0.5(빠름)..16(느림) → 슬라이더는 빠를수록 오른쪽
+        value={1 - (eff.beatsPerCycle - 0.5) / 15.5}
+        onChange={(t) => set({ beatsPerCycle: +(0.5 + (1 - t) * 15.5).toFixed(2) })}
+        readout={`${eff.beatsPerCycle}박/회`}
+      />
+      <EffSlider
+        label="분산"
+        value={eff.spread / 360}
+        onChange={(t) => set({ spread: Math.round(t * 360) })}
+        readout={`${eff.spread}°`}
+      />
+    </div>
+  );
+}
+
+function EffSlider({
+  label,
+  value,
+  onChange,
+  readout,
+}: {
+  label: string;
+  value: number;
+  onChange: (t: number) => void;
+  readout: string;
+}) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 9, color: "#9ab8e0" }}>
+      <span style={{ width: 26, flex: "0 0 auto" }}>{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={Math.max(0, Math.min(1, value))}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        style={{ flex: 1, accentColor: "#4aa0ff", height: 14 }}
+      />
+      <span style={{ width: 40, flex: "0 0 auto", textAlign: "right", color: "#c8d8ee" }}>{readout}</span>
+    </label>
+  );
+}
+
+function EffectsWindow() {
+  const effects = useSceneStore((s) => s.effects);
+  return (
+    <ScreenWindow title="Shapes and Effects" flex={1} bodyStyle={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {effects.length === 0 ? (
+        <div style={{ color: "#5a6a88", fontSize: 9.5, lineHeight: 1.5, padding: 3 }}>
+          그룹을 우클릭 → <b style={{ color: "#7f9ac4" }}>이펙트 추가</b>로
+          원·8자·좌우·상하·디머 웨이브를 겁니다. BPM은 아래 TAP으로 맞춥니다.
+        </div>
+      ) : (
+        effects.map((e) => <EffectRow key={e.id} eff={e} />)
+      )}
+    </ScreenWindow>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 export function TouchScreen() {
   return (
     <div
@@ -637,9 +774,10 @@ export function TouchScreen() {
         <BeamsWindow />
       </div>
 
-      {/* Playbacks(룩) */}
-      <div style={{ flex: 1.3, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      {/* Playbacks(룩) + Shapes and Effects */}
+      <div style={{ flex: 1.3, display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
         <PlaybacksWindow />
+        <EffectsWindow />
       </div>
 
       {/* 우측 메뉴 칼럼(장식) */}
@@ -678,6 +816,19 @@ const wsBtnStyle: React.CSSProperties = {
   padding: "4px 5px",
   width: "100%",
   cursor: "default",
+};
+
+const miniBtn: React.CSSProperties = {
+  width: 18,
+  height: 18,
+  borderRadius: 3,
+  border: "1px solid #33425f",
+  background: "#1b2338",
+  color: "#c3d3ee",
+  fontSize: 10,
+  cursor: "pointer",
+  flex: "0 0 auto",
+  padding: 0,
 };
 
 function addBtnStyle(disabled: boolean): React.CSSProperties {

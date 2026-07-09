@@ -14,13 +14,18 @@ import { FIXTURES_CONFIG, type FixtureType } from "../config/fixtures.config";
 import {
   FADER_SLOT_COUNT,
   DEFAULT_LOOK_FADE_MS,
+  DEFAULT_BPM,
   type FixtureGroupDef,
   type LookValues,
   type LookDef,
   type FaderAssignment,
   type FaderSlot,
+  type EffectDef,
+  type ShapeType,
+  type LiveOffset,
 } from "./console-types";
 import { startFade } from "./fade-engine";
+import { syncEffectEngine } from "./effect-engine";
 
 export type TransformMode = "translate" | "rotate" | "scale";
 export type Vec3 = [number, number, number];
@@ -143,6 +148,14 @@ interface SceneState {
   /** 블랙아웃(전체 출력 ×0) */
   blackout: boolean;
 
+  // ─── 콘솔: 셰이프/이펙트 제너레이터 (런타임 전용 — undo/영속 대상 아님) ───
+  /** 실행 중/정지 이펙트 목록 */
+  effects: EffectDef[];
+  /** 이펙트 속도 동기용 BPM (탭 템포로 설정) */
+  bpm: number;
+  /** 이펙트 엔진이 매 프레임 쓰는 렌더용 오프셋 — 팬/틸트 가산 + 디머 곱산 */
+  liveOffsets: Record<string, LiveOffset>;
+
   setSceneName: (name: string) => void;
   setSceneBrightness: (v: number) => void;
   setLightPosition: (axis: 0 | 1 | 2, value: number) => void;
@@ -214,6 +227,20 @@ interface SceneState {
   setFlashHeld: (slotIndex: number, held: boolean) => void;
   setGrandMaster: (level: number) => void;
   toggleBlackout: () => void;
+
+  // ─── 콘솔: 셰이프/이펙트 ───
+  /** 그룹을 대상으로 이펙트 생성(기본 실행 상태). 그룹이 비면 no-op */
+  createEffect: (groupId: string, shape: ShapeType) => void;
+  updateEffect: (id: string, patch: Partial<EffectDef>) => void;
+  removeEffect: (id: string) => void;
+  toggleEffect: (id: string) => void;
+  /** 모든 이펙트 정지·제거 후 원위치 복귀 */
+  clearEffects: () => void;
+  setBpm: (bpm: number) => void;
+  /** 탭 템포 — 연속 탭 간격으로 BPM 산출 */
+  tapTempo: () => void;
+  /** 이펙트 엔진 전용: 렌더 오프셋 일괄 반영(undo 미기록) */
+  setLiveOffsets: (offsets: Record<string, LiveOffset>) => void;
 
   // 히스토리
   undo: () => void;
@@ -377,7 +404,30 @@ function patch(
 }
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const clampScale = (v: number) => Math.max(0.05, Math.min(50, v));
+
+// ─── 이펙트 프리셋/라벨 ───
+const SHAPE_LABEL: Record<ShapeType, string> = {
+  circle: "원",
+  figure8: "8자",
+  pan: "팬",
+  tilt: "틸트",
+  dimmerWave: "디머",
+};
+const EFFECT_PRESET: Record<
+  ShapeType,
+  { size: number; beatsPerCycle: number; spread: number; direction: 1 | -1 }
+> = {
+  circle: { size: 30, beatsPerCycle: 4, spread: 0, direction: 1 },
+  figure8: { size: 30, beatsPerCycle: 4, spread: 0, direction: 1 },
+  pan: { size: 45, beatsPerCycle: 2, spread: 0, direction: 1 },
+  tilt: { size: 25, beatsPerCycle: 2, spread: 0, direction: 1 },
+  dimmerWave: { size: 1, beatsPerCycle: 2, spread: 360, direction: 1 },
+};
+
+// 탭 템포 타임스탬프 버퍼(런타임 전용)
+const tapTimes: number[] = [];
 
 // ─── 히스토리 ───
 // 변형 직전 상태를 past에 쌓는다. 같은 key의 연속 조작(기즈모 드래그, 슬라이더)이
@@ -445,7 +495,10 @@ export function selectEffectiveDimmer(state: SceneState, id: string): number {
     gm = Math.min(gm, level);
   }
 
-  return htp * gm * state.grandMaster;
+  // 디머 웨이브 이펙트 — 현재 출력에 물결 배율(0..1)을 곱한다
+  const dimMul = state.liveOffsets[id]?.dimMul ?? 1;
+
+  return htp * gm * state.grandMaster * dimMul;
 }
 
 // ─── v2 .btw 콘솔 섹션 방어적 파싱 헬퍼 ───
@@ -565,6 +618,9 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   faderSlots: defaultFaderSlots(),
   grandMaster: 1,
   blackout: false,
+  effects: [],
+  bpm: DEFAULT_BPM,
+  liveOffsets: {},
 
   setSceneName: (name) => set({ sceneName: name }),
 
@@ -984,7 +1040,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       return { ...hist, groups: s.groups.map((g) => (g.id === id ? { ...g, name } : g)) };
     }),
 
-  deleteGroup: (id) =>
+  deleteGroup: (id) => {
     set((s) => {
       if (!s.groups.some((g) => g.id === id)) return {};
       const hist = record(s, null);
@@ -996,8 +1052,12 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
             ? { ...sl, assignment: null }
             : sl,
         ),
+        // 이 그룹을 대상으로 하던 이펙트도 제거 (라이브 — 히스토리 밖)
+        effects: s.effects.filter((e) => e.groupId !== id),
       };
-    }),
+    });
+    syncEffectEngine();
+  },
 
   updateGroupMembers: (id) =>
     set((s) => {
@@ -1189,6 +1249,61 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   setGrandMaster: (level) => set({ grandMaster: clamp01(level) }),
 
   toggleBlackout: () => set((s) => ({ blackout: !s.blackout })),
+
+  // ─── 셰이프/이펙트 ───
+  createEffect: (groupId, shape) => {
+    const s = get();
+    const group = s.groups.find((g) => g.id === groupId);
+    if (!group || group.fixtureIds.length === 0) return;
+    const preset = EFFECT_PRESET[shape];
+    const eff: EffectDef = {
+      id: genId(),
+      name: `${group.name} ${SHAPE_LABEL[shape]}`,
+      groupId,
+      shape,
+      running: true,
+      ...preset,
+    };
+    set({ effects: [...s.effects, eff] });
+    syncEffectEngine();
+  },
+
+  updateEffect: (id, patch) =>
+    set((s) => ({
+      effects: s.effects.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+    })),
+
+  removeEffect: (id) => {
+    set((s) => ({ effects: s.effects.filter((e) => e.id !== id) }));
+    syncEffectEngine();
+  },
+
+  toggleEffect: (id) => {
+    set((s) => ({
+      effects: s.effects.map((e) => (e.id === id ? { ...e, running: !e.running } : e)),
+    }));
+    syncEffectEngine();
+  },
+
+  clearEffects: () => set({ effects: [], liveOffsets: {} }),
+
+  setBpm: (bpm) => set({ bpm: clamp(bpm, 20, 400) }),
+
+  tapTempo: () => {
+    const now = performance.now();
+    // 2초 넘게 끊기면 새 시퀀스로 리셋
+    if (tapTimes.length > 0 && now - tapTimes[tapTimes.length - 1] > 2000) tapTimes.length = 0;
+    tapTimes.push(now);
+    if (tapTimes.length > 6) tapTimes.shift();
+    if (tapTimes.length >= 2) {
+      const intervals = [];
+      for (let i = 1; i < tapTimes.length; i++) intervals.push(tapTimes[i] - tapTimes[i - 1]);
+      const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      if (avg > 0) set({ bpm: clamp(Math.round(60000 / avg), 20, 400) });
+    }
+  },
+
+  setLiveOffsets: (offsets) => set({ liveOffsets: offsets }),
 
   // ─── 히스토리 ───
   undo: () =>

@@ -124,6 +124,42 @@ function FaderSlotColumn({
   );
 }
 
+function BpmControl() {
+  const bpm = useSceneStore((s) => s.bpm);
+  const anyRunning = useSceneStore((s) => s.effects.some((e) => e.running));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div style={{ fontSize: 9, color: "#5a5a62", fontWeight: 600 }}>Tempo</div>
+      <button
+        onClick={() => useSceneStore.getState().tapTempo()}
+        title="박자에 맞춰 반복 탭 → BPM 설정 (단축키 T)"
+        style={{
+          width: 52,
+          height: 46,
+          borderRadius: 6,
+          background: anyRunning
+            ? "linear-gradient(180deg, #3f7fd6, #1f4f9e)"
+            : "linear-gradient(180deg, #4a4a52, #303036)",
+          border: "1px solid #26262c",
+          color: "#fff",
+          fontWeight: 800,
+          fontSize: 13,
+          cursor: "pointer",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.2)",
+        }}
+      >
+        TAP
+      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#2a2a30", fontVariantNumeric: "tabular-nums" }}>
+          {Math.round(bpm)}
+        </span>
+        <span style={{ fontSize: 8, color: "#5a5a62", fontWeight: 700 }}>BPM</span>
+      </div>
+    </div>
+  );
+}
+
 export function FaderStrip() {
   const faderSlots = useSceneStore((s) => s.faderSlots);
   const grandMaster = useSceneStore((s) => s.grandMaster);
@@ -187,6 +223,9 @@ export function FaderStrip() {
         <div style={{ fontSize: 11, color: "#8a5a10", fontWeight: 800 }}>M</div>
         <div style={{ fontSize: 8.5, fontWeight: 600, color: "#5a5a62" }}>Grand</div>
       </div>
+
+      {/* BPM / Tap Tempo (이펙트 속도 동기) */}
+      <BpmControl />
 
       <div style={{ width: 2, alignSelf: "stretch", background: "#a0a0a6", margin: "0 4px", borderRadius: 2 }} />
 

@@ -24,8 +24,13 @@ export function MovableFixture({ id }: { id: string }) {
   // 최종 출력 밝기(그룹 마스터·페이더 HTP·그랜드마스터·블랙아웃 합성) — 숫자 하나만 구독.
   // f.dimmer는 ControlPanel이 표시/편집하는 "직접(프로그램)" 값으로 그대로 둔다.
   const effectiveDimmer = useSceneStore((s) => selectEffectiveDimmer(s, id));
+  // 셰이프/이펙트 엔진이 매 프레임 갱신하는 팬/틸트 오프셋 (없으면 undefined → 리렌더 없음)
+  const offset = useSceneStore((s) => s.liveOffsets[id]);
 
   if (!f) return null;
+
+  const panLive = f.pan + (offset?.pan ?? 0);
+  const tiltLive = f.tilt + (offset?.tilt ?? 0);
 
   // dimmer를 시각화하는 타입은 f.on 대신 effectiveDimmer>0 여부로 점등 판정한다.
   // (블랙아웃·마스터가 0이어도 f.on 자체는 true일 수 있으므로 실제 출력 기준으로 켬/끔을 결정)
@@ -39,8 +44,8 @@ export function MovableFixture({ id }: { id: string }) {
           on={litOn}
           dimmer={effectiveDimmer}
           color={f.color}
-          pan={f.pan}
-          tilt={f.tilt}
+          pan={panLive}
+          tilt={tiltLive}
           angle={f.angle}
           position={f.position}
           rotation={f.rotation}
@@ -54,8 +59,8 @@ export function MovableFixture({ id }: { id: string }) {
           on={litOn}
           dimmer={effectiveDimmer}
           color={f.color}
-          pan={f.pan}
-          tilt={f.tilt}
+          pan={panLive}
+          tilt={tiltLive}
           angle={f.angle}
           position={f.position}
           rotation={f.rotation}

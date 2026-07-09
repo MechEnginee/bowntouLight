@@ -110,7 +110,7 @@ export default function App() {
   // 패널 크기 (좌/우 목록·제어패널 폭, 하단 콘솔 높이) — 경계를 드래그해 조절
   const [leftWidth, setLeftWidth] = useState(260);
   const [rightWidth, setRightWidth] = useState(260);
-  const [consoleHeight, setConsoleHeight] = useState(384);
+  const [consoleHeight, setConsoleHeight] = useState(430);
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
   // ─── 전역 키보드 단축키 ───
@@ -163,6 +163,9 @@ export default function App() {
         st.setTransformMode("scale");
       } else if (!mod && key === "b") {
         st.toggleBlackout();
+      } else if (!mod && !e.repeat && key === "t") {
+        // T = 탭 템포 (이펙트 BPM 동기)
+        st.tapTempo();
       } else if (!mod && !e.repeat && key in DIGIT_TO_SLOT) {
         // 1~0 = 페이더 슬롯 1~10 Flash (누르는 동안). 키 반복(auto-repeat)은 무시.
         st.setFlashHeld(DIGIT_TO_SLOT[key], true);
@@ -510,7 +513,7 @@ export default function App() {
           <br />
           Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행 · Esc=선택해제
           <br />
-          1~0=페이더 Flash · B=블랙아웃 · Ctrl+`=개발자 통계
+          1~0=페이더 Flash · B=블랙아웃 · T=탭템포 · Ctrl+`=개발자 통계
           <br />
           <span style={{ color: "#4A90D9" }}>
             기즈모: {MODE_LABEL[transformMode]}
