@@ -8,7 +8,7 @@
 // 벽/바닥(Surface)은 화면을 크게 덮으므로 group에 onClick을 달지 않는다(마퀴 드래그 보호).
 // 대신 group.userData.fixtureId 로 표시해 두면 App이 클릭(작은 드래그) 시 직접 선택한다.
 
-import { useSceneStore } from "../../store/scene-store";
+import { useSceneStore, selectEffectiveDimmer } from "../../store/scene-store";
 import { SURFACE_SIZE } from "../../config/fixtures.config";
 import { MovingHead } from "./MovingHead";
 import { MiniBeam } from "./MiniBeam";
@@ -21,16 +21,23 @@ import { Bar, BAR_WIDTH, BAR_HEIGHT } from "./Bar";
 export function MovableFixture({ id }: { id: string }) {
   const f = useSceneStore((s) => s.fixtures[id]);
   const selected = useSceneStore((s) => s.selectedIds.includes(id));
+  // 최종 출력 밝기(그룹 마스터·페이더 HTP·그랜드마스터·블랙아웃 합성) — 숫자 하나만 구독.
+  // f.dimmer는 ControlPanel이 표시/편집하는 "직접(프로그램)" 값으로 그대로 둔다.
+  const effectiveDimmer = useSceneStore((s) => selectEffectiveDimmer(s, id));
 
   if (!f) return null;
+
+  // dimmer를 시각화하는 타입은 f.on 대신 effectiveDimmer>0 여부로 점등 판정한다.
+  // (블랙아웃·마스터가 0이어도 f.on 자체는 true일 수 있으므로 실제 출력 기준으로 켬/끔을 결정)
+  const litOn = effectiveDimmer > 0;
 
   let visual: JSX.Element | null = null;
   switch (f.type) {
     case "movingHead":
       visual = (
         <MovingHead
-          on={f.on}
-          dimmer={f.dimmer}
+          on={litOn}
+          dimmer={effectiveDimmer}
           color={f.color}
           pan={f.pan}
           tilt={f.tilt}
@@ -44,8 +51,8 @@ export function MovableFixture({ id }: { id: string }) {
     case "par":
       visual = (
         <MiniBeam
-          on={f.on}
-          dimmer={f.dimmer}
+          on={litOn}
+          dimmer={effectiveDimmer}
           color={f.color}
           pan={f.pan}
           tilt={f.tilt}
@@ -58,7 +65,7 @@ export function MovableFixture({ id }: { id: string }) {
       break;
     case "strobe":
       visual = (
-        <StrobeLight on={f.on} dimmer={f.dimmer} rate={f.strobeRate} color={f.color} />
+        <StrobeLight on={litOn} dimmer={effectiveDimmer} rate={f.strobeRate} color={f.color} />
       );
       break;
     case "hazer":
@@ -69,7 +76,7 @@ export function MovableFixture({ id }: { id: string }) {
       visual = <Surface type={f.type} color={f.color} />;
       break;
     case "light":
-      visual = <SceneLight on={f.on} dimmer={f.dimmer} color={f.color} />;
+      visual = <SceneLight on={litOn} dimmer={effectiveDimmer} color={f.color} />;
       break;
     case "bar":
       visual = <Bar color={f.color} />;

@@ -1,9 +1,9 @@
-// App.tsx — 3D 뷰어 + 좌/우 패널 + 다중 선택.
+// App.tsx — 3D 뷰어 + 좌/우 패널 + 하단 콘솔 패널 + 다중 선택.
 // 카메라: 휠=줌 / 좌클릭=없음 / 우클릭 드래그=회전 / 휠클릭 드래그=팬.
 // 선택: 픽스처 클릭(Ctrl/Shift 지원) · 빈 공간 좌드래그=마퀴 박스 선택.
 // 좌측 목록 항목을 캔버스로 드래그&드롭하면 해당 픽스처를 그 지점으로 이동.
-// 단축키: 1/2/3=이동/회전/크기 기즈모 · Ctrl+C/V=복사/붙여넣기 · Delete=삭제
-//         Ctrl+Z=실행취소 · Ctrl+Shift+Z 또는 Ctrl+Y=다시실행
+// 단축키: W/E/R=이동/회전/크기 기즈모 · 1~0=페이더 슬롯 Flash · B=블랙아웃
+//         Ctrl+C/V=복사/붙여넣기 · Delete=삭제 · Ctrl+Z=실행취소 · Ctrl+Shift+Z 또는 Ctrl+Y=다시실행
 
 import { useEffect, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
@@ -16,6 +16,7 @@ import { SelectionControls } from "./components/scene/SelectionControls";
 import { FixtureList } from "./components/ui/FixtureList";
 import { ControlPanel } from "./components/ui/ControlPanel";
 import { ScenePanel } from "./components/ui/ScenePanel";
+import { ConsolePanel } from "./components/ui/ConsolePanel";
 import { BAR_WIDTH, BAR_HEIGHT } from "./components/fixtures/Bar";
 import { SURFACE_SIZE } from "./config/fixtures.config";
 import { useSceneStore, type FixtureRuntime } from "./store/scene-store";
@@ -106,7 +107,14 @@ export default function App() {
   const [stats, setStats] = useState({ fps: 0, tris: 0 });
 
   // ─── 전역 키보드 단축키 ───
+  // 콘솔 도입(D-6)으로 1~0은 페이더 슬롯 Flash에 배정됐다. 기존 기즈모 모드 단축키는
+  // 충돌을 피해 3D 툴 관례인 W(이동)/E(회전)/R(크기)로 이동했다.
   useEffect(() => {
+    const DIGIT_TO_SLOT: Record<string, number> = {
+      "1": 0, "2": 1, "3": 2, "4": 3, "5": 4,
+      "6": 5, "7": 6, "8": 7, "9": 8, "0": 9,
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       // 입력 필드에서 타이핑 중이면 무시
@@ -140,16 +148,33 @@ export default function App() {
         // Ctrl+` : 개발자 통계(FPS·폴리곤) 토글
         e.preventDefault();
         setShowStats((v) => !v);
-      } else if (e.key === "1") {
+      } else if (!mod && key === "w") {
         st.setTransformMode("translate");
-      } else if (e.key === "2") {
+      } else if (!mod && key === "e") {
         st.setTransformMode("rotate");
-      } else if (e.key === "3") {
+      } else if (!mod && key === "r") {
         st.setTransformMode("scale");
+      } else if (!mod && key === "b") {
+        st.toggleBlackout();
+      } else if (!mod && !e.repeat && key in DIGIT_TO_SLOT) {
+        // 1~0 = 페이더 슬롯 1~10 Flash (누르는 동안). 키 반복(auto-repeat)은 무시.
+        st.setFlashHeld(DIGIT_TO_SLOT[key], true);
       }
     };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (key in DIGIT_TO_SLOT) {
+        useSceneStore.getState().setFlashHeld(DIGIT_TO_SLOT[key], false);
+      }
+    };
+
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, []);
 
   // ─── 좌측 목록 → 캔버스 드롭: 화면 좌표를 픽스처 높이 평면에 투영해 XZ 이동 ───
@@ -343,9 +368,17 @@ export default function App() {
 
   return (
     <div
-      style={{ display: "flex", width: "100vw", height: "100vh", background: "#0d0d0d" }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        width: "100vw",
+        height: "100vh",
+        background: "#0d0d0d",
+      }}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* 상단 3단: 픽스처 목록 | 3D 뷰 | 제어 패널 (콘솔 패널이 아래를 차지하는 만큼 줄어듦) */}
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
       <FixtureList />
 
       <div
@@ -462,11 +495,11 @@ export default function App() {
           <br />
           클릭/Ctrl/Shift=선택 · 빈곳 드래그=박스선택(→완전포함/←걸침) · 우클릭=On
           <br />
-          1/2/3=이동/회전/크기 · Ctrl+C/V=복사/붙여넣기 · Del=삭제
+          W/E/R=이동/회전/크기 · Ctrl+C/V=복사/붙여넣기 · Del=삭제
           <br />
           Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행 · Esc=선택해제
           <br />
-          Ctrl+` = 개발자 통계(FPS·폴리곤)
+          1~0=페이더 Flash · B=블랙아웃 · Ctrl+`=개발자 통계
           <br />
           <span style={{ color: "#4A90D9" }}>
             기즈모: {MODE_LABEL[transformMode]}
@@ -475,6 +508,9 @@ export default function App() {
       </div>
 
       <ControlPanel />
+      </div>
+
+      <ConsolePanel />
     </div>
   );
 }
