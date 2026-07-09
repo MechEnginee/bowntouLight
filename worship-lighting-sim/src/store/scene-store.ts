@@ -155,7 +155,13 @@ interface SceneState {
   // 선택
   selectSingle: (id: string) => void;
   toggleSelect: (id: string) => void;
-  rangeSelect: (id: string) => void;
+  /**
+   * Shift+클릭 범위 선택. 앵커~클릭 사이를 선택한다.
+   * orderOverride를 주면 그 순서(= 화면에 보이는 목록 순서)로 범위를 계산한다.
+   * 목록(FixtureList/터치스크린 Fixtures)은 타입별로 재정렬해 표시하므로
+   * 반드시 화면 순서를 넘겨야 "보이는 대로" 범위가 잡힌다. 미지정 시 store.order 사용.
+   */
+  rangeSelect: (id: string, orderOverride?: string[]) => void;
   setSelection: (ids: string[], additive?: boolean) => void;
   clearSelection: () => void;
 
@@ -732,14 +738,18 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       };
     }),
 
-  rangeSelect: (id) =>
+  rangeSelect: (id, orderOverride) =>
     set((s) => {
+      const ord = orderOverride ?? s.order;
       const anchor = s.anchorId ?? id;
-      const i = s.order.indexOf(anchor);
-      const j = s.order.indexOf(id);
-      if (i < 0 || j < 0) return { selectedIds: [id], anchorId: id };
+      let i = ord.indexOf(anchor);
+      const j = ord.indexOf(id);
+      // 클릭 대상이 이 순서에 없으면 선택 불가 — 단일 선택으로 폴백
+      if (j < 0) return { selectedIds: [id], anchorId: id };
+      // 앵커가 이 목록에 없으면(다른 창에서 잡힌 앵커 등) 클릭 지점을 앵커로
+      if (i < 0) i = j;
       const [lo, hi] = i <= j ? [i, j] : [j, i];
-      return { selectedIds: s.order.slice(lo, hi + 1), anchorId: anchor };
+      return { selectedIds: ord.slice(lo, hi + 1), anchorId: anchor };
     }),
 
   setSelection: (ids, additive = false) =>

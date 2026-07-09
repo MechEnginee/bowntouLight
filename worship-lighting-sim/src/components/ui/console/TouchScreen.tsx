@@ -123,7 +123,7 @@ function FixturesWindow() {
   const onCellClick = (id: string, e: React.MouseEvent) => {
     const s = useSceneStore.getState();
     if (e.ctrlKey || e.metaKey) s.toggleSelect(id);
-    else if (e.shiftKey) s.rangeSelect(id);
+    else if (e.shiftKey) s.rangeSelect(id, ids); // 이 창에 보이는 순서로 범위 계산
     else s.selectSingle(id);
   };
 

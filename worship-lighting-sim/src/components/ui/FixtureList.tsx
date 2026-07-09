@@ -43,9 +43,13 @@ export function FixtureList({ width = 260 }: { width?: number }) {
   const idsByType = (t: FixtureType) =>
     order.filter((id) => fixtures[id].type === t);
 
+  // 화면에 보이는 순서(타입별 그룹 순서대로 평탄화) — Shift 범위 선택의 기준.
+  // store.order와 다를 수 있으므로 반드시 이 순서로 범위를 계산해야 한다.
+  const visibleOrder = TYPE_ORDER.flatMap((t) => idsByType(t));
+
   const handleClick = (id: string, e: React.MouseEvent) => {
     const s = useSceneStore.getState();
-    if (e.shiftKey) s.rangeSelect(id);
+    if (e.shiftKey) s.rangeSelect(id, visibleOrder);
     else if (e.ctrlKey || e.metaKey) s.toggleSelect(id);
     else s.selectSingle(id);
   };
