@@ -107,6 +107,7 @@ export default function App() {
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState({ fps: 0, tris: 0 });
+  const [showHelp, setShowHelp] = useState(false); // 좌하단 단축키 도움말 토글
 
   // 패널 크기 (좌/우 목록·제어패널 폭, 하단 콘솔 높이) — 경계를 드래그해 조절
   const [leftWidth, setLeftWidth] = useState(260);
@@ -498,27 +499,62 @@ export default function App() {
             position: "absolute",
             bottom: 12,
             left: 12,
-            color: "#c8c8d0",
-            font: "12px/1.6 monospace",
-            background: "#1a1a2ecc",
-            padding: "8px 12px",
-            borderRadius: 6,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: 8,
             pointerEvents: "none",
           }}
         >
-          휠=줌 · 우클릭=회전 · 휠클릭=이동
-          <br />
-          클릭/Ctrl/Shift=선택 · 빈곳 드래그=박스선택(→완전포함/←걸침) · 우클릭=On
-          <br />
-          W/E/R=이동/회전/크기 · Ctrl+C/V=복사/붙여넣기 · Del=삭제
-          <br />
-          Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행 · Esc=선택해제
-          <br />
-          1~0=페이더 Flash · B=블랙아웃 · T=탭템포 · Ctrl+`=개발자 통계
-          <br />
-          <span style={{ color: "#4A90D9" }}>
-            기즈모: {MODE_LABEL[transformMode]}
-          </span>
+          {showHelp && (
+            <div
+              style={{
+                color: "#c8c8d0",
+                font: "12px/1.6 monospace",
+                background: "#1a1a2ee6",
+                padding: "8px 12px",
+                borderRadius: 6,
+                border: "1px solid #2a2a40",
+                pointerEvents: "none",
+              }}
+            >
+              휠=줌 · 우클릭=회전 · 휠클릭=이동
+              <br />
+              클릭/Ctrl/Shift=선택 · 빈곳 드래그=박스선택(→완전포함/←걸침) · 우클릭=On
+              <br />
+              W/E/R=이동/회전/크기 · Ctrl+C/V=복사/붙여넣기 · Del=삭제
+              <br />
+              Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행 · Esc=선택해제
+              <br />
+              1~0=페이더 Flash · B=블랙아웃 · T=탭템포 · Ctrl+`=개발자 통계
+              <br />
+              <span style={{ color: "#4A90D9" }}>기즈모: {MODE_LABEL[transformMode]}</span>
+            </div>
+          )}
+          <button
+            onClick={() => setShowHelp((v) => !v)}
+            title={showHelp ? "도움말 닫기" : "단축키 도움말"}
+            aria-label="단축키 도움말"
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              background: showHelp ? "#4A90D9" : "#3a3a45",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.25)",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+              fontSize: 15,
+              fontWeight: 800,
+              cursor: "pointer",
+              pointerEvents: "auto",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </button>
         </div>
       </div>
 
