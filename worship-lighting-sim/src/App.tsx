@@ -17,6 +17,7 @@ import { FixtureList } from "./components/ui/FixtureList";
 import { ControlPanel } from "./components/ui/ControlPanel";
 import { ScenePanel } from "./components/ui/ScenePanel";
 import { ConsolePanel } from "./components/ui/ConsolePanel";
+import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { BAR_WIDTH, BAR_HEIGHT } from "./components/fixtures/Bar";
 import { SURFACE_SIZE } from "./config/fixtures.config";
 import { useSceneStore, type FixtureRuntime } from "./store/scene-store";
@@ -105,6 +106,12 @@ export default function App() {
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState({ fps: 0, tris: 0 });
+
+  // 패널 크기 (좌/우 목록·제어패널 폭, 하단 콘솔 높이) — 경계를 드래그해 조절
+  const [leftWidth, setLeftWidth] = useState(260);
+  const [rightWidth, setRightWidth] = useState(260);
+  const [consoleHeight, setConsoleHeight] = useState(300);
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
   // ─── 전역 키보드 단축키 ───
   // 콘솔 도입(D-6)으로 1~0은 페이더 슬롯 Flash에 배정됐다. 기존 기즈모 모드 단축키는
@@ -379,7 +386,11 @@ export default function App() {
     >
       {/* 상단 3단: 픽스처 목록 | 3D 뷰 | 제어 패널 (콘솔 패널이 아래를 차지하는 만큼 줄어듦) */}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <FixtureList />
+      <FixtureList width={leftWidth} />
+      <ResizeHandle
+        orientation="vertical"
+        onDelta={(d) => setLeftWidth((w) => clamp(w + d, 180, 520))}
+      />
 
       <div
         style={{ flex: 1, position: "relative", minWidth: 0 }}
@@ -507,10 +518,17 @@ export default function App() {
         </div>
       </div>
 
-      <ControlPanel />
+      <ResizeHandle
+        orientation="vertical"
+        onDelta={(d) => setRightWidth((w) => clamp(w - d, 200, 520))}
+      />
+      <ControlPanel width={rightWidth} />
       </div>
 
-      <ConsolePanel />
+      <ConsolePanel
+        height={consoleHeight}
+        onHeightChange={(h) => setConsoleHeight(clamp(h, 120, 640))}
+      />
     </div>
   );
 }

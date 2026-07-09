@@ -31,7 +31,7 @@ const TYPE_ORDER: FixtureType[] = [
 /** 목록에서 바로 새 오브젝트를 추가할 수 있는 타입 */
 const ADDABLE: FixtureType[] = ["light", "bar", "wall", "floor"];
 
-export function FixtureList() {
+export function FixtureList({ width = 260 }: { width?: number }) {
   const fixtures = useSceneStore((s) => s.fixtures);
   const order = useSceneStore((s) => s.order);
   const selectedIds = useSceneStore((s) => s.selectedIds);
@@ -65,8 +65,8 @@ export function FixtureList() {
   return (
     <aside
       style={{
-        width: 260,
-        flex: "0 0 260px",
+        width,
+        flex: `0 0 ${width}px`,
         height: "100%",
         background: "#1a1a2e",
         color: "#E0E0E0",

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useSceneStore } from "../../../store/scene-store";
 import type { FaderAssignment } from "../../../store/console-types";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { ResizeHandle } from "../ResizeHandle";
 
 const SCREEN_BG = "#141b2e";
 const WINDOW_BG = "#1a2438";
@@ -32,7 +33,7 @@ function slotSubmenu(
   return items;
 }
 
-function GroupsWindow() {
+function GroupsWindow({ width }: { width: number }) {
   const groups = useSceneStore((s) => s.groups);
   const selectedIds = useSceneStore((s) => s.selectedIds);
   const faderSlots = useSceneStore((s) => s.faderSlots);
@@ -54,7 +55,7 @@ function GroupsWindow() {
   };
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+    <div style={{ flex: `0 0 ${width}px`, display: "flex", flexDirection: "column", minWidth: 0 }}>
       <div
         style={{
           background: TITLEBAR_BG,
@@ -373,11 +374,12 @@ function LooksWindow() {
 }
 
 export function TouchScreen() {
+  const [groupsWidth, setGroupsWidth] = useState(340);
+
   return (
     <div
       style={{
         display: "flex",
-        gap: 1,
         background: SCREEN_BG,
         border: "2px solid #0a0a0a",
         borderRadius: 4,
@@ -385,8 +387,11 @@ export function TouchScreen() {
         overflow: "hidden",
       }}
     >
-      <GroupsWindow />
-      <div style={{ width: 1, background: "#2a3550" }} />
+      <GroupsWindow width={groupsWidth} />
+      <ResizeHandle
+        orientation="vertical"
+        onDelta={(d) => setGroupsWidth((w) => Math.max(160, Math.min(800, w + d)))}
+      />
       <LooksWindow />
     </div>
   );
