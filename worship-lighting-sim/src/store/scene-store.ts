@@ -83,6 +83,10 @@ export interface SceneFile {
       values: Record<string, LookValues>;
     }>;
     faderSlots: Array<{ assignment: FaderAssignment | null; level: number }>;
+    /** 이펙트 속도 동기 BPM */
+    bpm?: number;
+    /** 셰이프/이펙트 (running 포함 — 저장 시점 실행 상태로 복원) */
+    effects?: EffectDef[];
   };
 }
 
@@ -600,6 +604,35 @@ function coerceFaderSlots(
   });
 }
 
+const VALID_SHAPES: ShapeType[] = ["circle", "figure8", "pan", "tilt", "dimmerWave"];
+
+function coerceEffects(raw: unknown, groups: FixtureGroupDef[]): EffectDef[] {
+  if (!Array.isArray(raw)) return [];
+  const validGroupIds = new Set(groups.map((g) => g.id));
+  const out: EffectDef[] = [];
+  for (const e of raw) {
+    if (!e || typeof e !== "object") continue;
+    const o = e as Record<string, unknown>;
+    if (typeof o.groupId !== "string" || !validGroupIds.has(o.groupId)) continue; // 그룹 사라졌으면 스킵
+    if (typeof o.shape !== "string" || !VALID_SHAPES.includes(o.shape as ShapeType)) continue;
+    out.push({
+      id: typeof o.id === "string" && o.id ? o.id : genId(),
+      name: typeof o.name === "string" ? o.name : "이펙트",
+      groupId: o.groupId,
+      shape: o.shape as ShapeType,
+      size: typeof o.size === "number" && Number.isFinite(o.size) ? o.size : 30,
+      beatsPerCycle:
+        typeof o.beatsPerCycle === "number" && Number.isFinite(o.beatsPerCycle)
+          ? clamp(o.beatsPerCycle, 0.5, 16)
+          : 4,
+      spread: typeof o.spread === "number" && Number.isFinite(o.spread) ? clamp(o.spread, 0, 360) : 0,
+      direction: o.direction === -1 ? -1 : 1,
+      running: o.running !== false,
+    });
+  }
+  return out;
+}
+
 export const useSceneStore = create<SceneState>()((set, get) => ({
   fixtures: initialFixtures,
   order: initialOrder,
@@ -697,6 +730,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           assignment: sl.assignment,
           level: sl.level,
         })),
+        bpm: s.bpm,
+        effects: s.effects.map((e) => ({ ...e })),
       },
     };
   },
@@ -755,6 +790,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     const looks = coerceLooks(d.console?.looks, fixtures);
     const faderSlots = coerceFaderSlots(d.console?.faderSlots, groups, looks);
     const grandMaster = clamp01(num(d.console?.grandMaster, 1));
+    const effects = coerceEffects(d.console?.effects, groups);
+    const bpm = clamp(num(d.console?.bpm, DEFAULT_BPM), 20, 400);
 
     set({
       fixtures,
@@ -776,7 +813,12 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       faderSlots,
       grandMaster,
       blackout: false,
+      effects,
+      bpm,
+      liveOffsets: {},
     });
+    // 저장 시 실행 중이던 이펙트가 있으면 엔진 재가동
+    syncEffectEngine();
     return { ok: true };
   },
 
