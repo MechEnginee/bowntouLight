@@ -17,6 +17,7 @@ import { FixtureList } from "./components/ui/FixtureList";
 import { ControlPanel } from "./components/ui/ControlPanel";
 import { ScenePanel } from "./components/ui/ScenePanel";
 import { ConsolePanel } from "./components/ui/ConsolePanel";
+import { AudioTimeline } from "./components/ui/audio/AudioTimeline";
 import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { BAR_WIDTH, BAR_HEIGHT } from "./components/fixtures/Bar";
 import { SURFACE_SIZE } from "./config/fixtures.config";
@@ -527,6 +528,9 @@ export default function App() {
       />
       <ControlPanel width={rightWidth} />
       </div>
+
+      {/* 3D 뷰와 콘솔 사이: 음원 타임라인(연습용) */}
+      <AudioTimeline />
 
       <ConsolePanel
         height={consoleHeight}

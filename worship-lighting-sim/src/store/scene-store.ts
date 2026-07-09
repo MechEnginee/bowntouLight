@@ -26,6 +26,7 @@ import {
 } from "./console-types";
 import { startFade } from "./fade-engine";
 import { syncEffectEngine } from "./effect-engine";
+import { useAudioStore, type AudioMarker } from "./audio-store";
 
 export type TransformMode = "translate" | "rotate" | "scale";
 export type Vec3 = [number, number, number];
@@ -89,6 +90,11 @@ export interface SceneFile {
     effects?: EffectDef[];
     /** 사용자가 Colours 창에 추가한 커스텀 색(#rrggbb) */
     customColors?: string[];
+  };
+  /** v2+: 음원 타임라인 — 파일명+메모 마커만 저장(오디오 원본은 재로드). */
+  audio?: {
+    fileName: string | null;
+    markers: Array<{ id: string; time: number; text: string; color?: string }>;
   };
 }
 
@@ -757,6 +763,10 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         effects: s.effects.map((e) => ({ ...e })),
         customColors: [...s.customColors],
       },
+      audio: (() => {
+        const a = useAudioStore.getState();
+        return { fileName: a.fileName, markers: a.markers.map((m) => ({ ...m })) };
+      })(),
     };
   },
 
@@ -853,6 +863,20 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     });
     // 저장 시 실행 중이던 이펙트가 있으면 엔진 재가동
     syncEffectEngine();
+    // 음원 타임라인: 파일명+메모 마커 복원(오디오 원본은 사용자가 다시 로드)
+    {
+      const rawAudio = (d as SceneFile).audio;
+      const markers: AudioMarker[] = Array.isArray(rawAudio?.markers)
+        ? rawAudio.markers
+            .filter(
+              (m): m is AudioMarker =>
+                !!m && typeof m.time === "number" && Number.isFinite(m.time) && typeof m.text === "string",
+            )
+            .map((m) => ({ id: typeof m.id === "string" ? m.id : genId(), time: m.time, text: m.text, color: m.color }))
+        : [];
+      const fileName = typeof rawAudio?.fileName === "string" ? rawAudio.fileName : null;
+      useAudioStore.getState().restoreFromScene(fileName, markers);
+    }
     return { ok: true };
   },
 
