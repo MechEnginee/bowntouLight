@@ -194,8 +194,75 @@ const COLOUR_PALETTE: { name: string; hex: string }[] = [
   { name: "White", hex: "#ffffff" },
 ];
 
+/** 밝은 색인지 판정(글자색 대비용) */
+function isLight(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.replace("#", "#"));
+  if (!m) return false;
+  const n = parseInt(hex.replace("#", ""), 16);
+  const r = (n >> 16) & 255,
+    g = (n >> 8) & 255,
+    b = n & 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150;
+}
+
+function Swatch({
+  hex,
+  label,
+  disabled,
+  onApply,
+  onDelete,
+}: {
+  hex: string;
+  label: string;
+  disabled: boolean;
+  onApply: () => void;
+  onDelete?: () => void;
+}) {
+  return (
+    <button
+      onClick={onApply}
+      onContextMenu={
+        onDelete
+          ? (e) => {
+              e.preventDefault();
+              onDelete();
+            }
+          : undefined
+      }
+      disabled={disabled}
+      title={
+        disabled
+          ? "픽스처를 먼저 선택하세요"
+          : onDelete
+            ? `${hex} 적용 · 우클릭=삭제`
+            : `${label} 적용`
+      }
+      style={{
+        width: 34,
+        height: 30,
+        borderRadius: 3,
+        border: "1px solid rgba(0,0,0,0.5)",
+        background: hex,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.4 : 1,
+        fontSize: 7.5,
+        color: isLight(hex) ? "#333" : "#fff",
+        textShadow: isLight(hex) ? "none" : "0 1px 1px rgba(0,0,0,0.6)",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        paddingBottom: 1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function ColoursWindow() {
   const selectedIds = useSceneStore((s) => s.selectedIds);
+  const customColors = useSceneStore((s) => s.customColors);
+  const [draft, setDraft] = useState("#ff8800");
   const apply = (hex: string) => {
     const s = useSceneStore.getState();
     if (s.selectedIds.length === 0) return;
@@ -207,32 +274,50 @@ function ColoursWindow() {
       title="Colours"
       bodyStyle={{ display: "flex", flexWrap: "wrap", alignContent: "flex-start", gap: 3 }}
     >
-      {COLOUR_PALETTE.map((c, i) => (
-        <button
-          key={c.name}
-          onClick={() => apply(c.hex)}
-          disabled={disabled}
-          title={disabled ? "픽스처를 먼저 선택하세요" : `${c.name} 적용`}
-          style={{
-            width: 34,
-            height: 30,
-            borderRadius: 3,
-            border: "1px solid rgba(0,0,0,0.5)",
-            background: c.hex,
-            cursor: disabled ? "not-allowed" : "pointer",
-            opacity: disabled ? 0.4 : 1,
-            fontSize: 7.5,
-            color: i >= 13 ? "#333" : "#fff",
-            textShadow: i >= 13 ? "none" : "0 1px 1px rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
-            paddingBottom: 1,
-          }}
-        >
-          {c.name}
-        </button>
+      {COLOUR_PALETTE.map((c) => (
+        <Swatch key={c.name} hex={c.hex} label={c.name} disabled={disabled} onApply={() => apply(c.hex)} />
       ))}
+      {customColors.map((hex) => (
+        <Swatch
+          key={hex}
+          hex={hex}
+          label=""
+          disabled={disabled}
+          onApply={() => apply(hex)}
+          onDelete={() => useSceneStore.getState().removeCustomColor(hex)}
+        />
+      ))}
+      {/* 색 추가 — 네이티브 색 선택기. 고른 색을 팔레트에 저장하고 선택 픽스처에 바로 적용 */}
+      <label
+        title="색 추가 (원하는 색 선택)"
+        style={{
+          width: 34,
+          height: 30,
+          borderRadius: 3,
+          border: "1px dashed #4a6a9c",
+          background: "transparent",
+          color: "#9ab8e0",
+          fontSize: 16,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          position: "relative",
+        }}
+      >
+        +
+        <input
+          type="color"
+          value={draft}
+          onChange={(e) => {
+            const hex = e.target.value;
+            setDraft(hex);
+            useSceneStore.getState().addCustomColor(hex);
+            apply(hex);
+          }}
+          style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
+        />
+      </label>
     </ScreenWindow>
   );
 }

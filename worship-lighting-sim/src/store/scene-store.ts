@@ -87,6 +87,8 @@ export interface SceneFile {
     bpm?: number;
     /** 셰이프/이펙트 (running 포함 — 저장 시점 실행 상태로 복원) */
     effects?: EffectDef[];
+    /** 사용자가 Colours 창에 추가한 커스텀 색(#rrggbb) */
+    customColors?: string[];
   };
 }
 
@@ -159,6 +161,8 @@ interface SceneState {
   bpm: number;
   /** 이펙트 엔진이 매 프레임 쓰는 렌더용 오프셋 — 팬/틸트 가산 + 디머 곱산 */
   liveOffsets: Record<string, LiveOffset>;
+  /** Colours 창에 사용자가 추가한 커스텀 색(#rrggbb) — 씬 파일에 영속화 */
+  customColors: string[];
 
   setSceneName: (name: string) => void;
   setSceneBrightness: (v: number) => void;
@@ -245,6 +249,11 @@ interface SceneState {
   tapTempo: () => void;
   /** 이펙트 엔진 전용: 렌더 오프셋 일괄 반영(undo 미기록) */
   setLiveOffsets: (offsets: Record<string, LiveOffset>) => void;
+
+  // ─── Colours: 커스텀 색 팔레트 ───
+  /** Colours 창에 색 추가 (중복·잘못된 hex는 무시) */
+  addCustomColor: (hex: string) => void;
+  removeCustomColor: (hex: string) => void;
 
   // 히스토리
   undo: () => void;
@@ -433,6 +442,17 @@ const EFFECT_PRESET: Record<
 
 // 탭 템포 타임스탬프 버퍼(런타임 전용)
 const tapTimes: number[] = [];
+
+/** "#rgb"/"#rrggbb"/"rrggbb"를 소문자 #rrggbb로 정규화. 잘못된 값이면 null */
+function normalizeHex(input: string): string | null {
+  if (typeof input !== "string") return null;
+  let h = input.trim().toLowerCase();
+  if (h[0] !== "#") h = "#" + h;
+  if (/^#[0-9a-f]{3}$/.test(h)) {
+    h = "#" + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+  }
+  return /^#[0-9a-f]{6}$/.test(h) ? h : null;
+}
 
 // ─── 히스토리 ───
 // 변형 직전 상태를 past에 쌓는다. 같은 key의 연속 조작(기즈모 드래그, 슬라이더)이
@@ -656,6 +676,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   effects: [],
   bpm: DEFAULT_BPM,
   liveOffsets: {},
+  customColors: [],
 
   setSceneName: (name) => set({ sceneName: name }),
 
@@ -734,6 +755,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         })),
         bpm: s.bpm,
         effects: s.effects.map((e) => ({ ...e })),
+        customColors: [...s.customColors],
       },
     };
   },
@@ -794,6 +816,15 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     const grandMaster = clamp01(num(d.console?.grandMaster, 1));
     const effects = coerceEffects(d.console?.effects, groups);
     const bpm = clamp(num(d.console?.bpm, DEFAULT_BPM), 20, 400);
+    const customColors = Array.isArray(d.console?.customColors)
+      ? Array.from(
+          new Set(
+            d.console.customColors
+              .map((c) => (typeof c === "string" ? normalizeHex(c) : null))
+              .filter((c): c is string => !!c),
+          ),
+        )
+      : [];
 
     set({
       fixtures,
@@ -818,6 +849,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       effects,
       bpm,
       liveOffsets: {},
+      customColors,
     });
     // 저장 시 실행 중이던 이펙트가 있으면 엔진 재가동
     syncEffectEngine();
@@ -1355,6 +1387,20 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   },
 
   setLiveOffsets: (offsets) => set({ liveOffsets: offsets }),
+
+  // ─── Colours: 커스텀 색 ───
+  addCustomColor: (hex) =>
+    set((s) => {
+      const norm = normalizeHex(hex);
+      if (!norm || s.customColors.includes(norm)) return {};
+      return { customColors: [...s.customColors, norm] };
+    }),
+
+  removeCustomColor: (hex) =>
+    set((s) => {
+      const norm = normalizeHex(hex);
+      return { customColors: s.customColors.filter((c) => c !== norm) };
+    }),
 
   // ─── 히스토리 ───
   undo: () =>
