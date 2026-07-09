@@ -88,7 +88,13 @@ export function ConsolePanel({
           <div style={{ flex: "1 1 auto", minHeight: 0, padding: "8px 12px 4px" }}>
             <TouchScreen />
           </div>
-          <div style={{ flex: `0 0 auto`, borderTop: "1px solid #a8a8ae", background: "#1a1a1e" }}>
+          <div
+            style={{
+              flex: `0 0 auto`,
+              borderTop: "2px solid #8c8c92",
+              background: "linear-gradient(180deg, #cfcfd4, #bcbcc2)",
+            }}
+          >
             <FaderStrip />
           </div>
         </>

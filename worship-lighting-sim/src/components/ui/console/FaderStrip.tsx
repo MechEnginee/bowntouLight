@@ -1,10 +1,13 @@
 // components/ui/console/FaderStrip.tsx
-// 콘솔 하단 페이더 스트립 — 실기기 하단 재현.
-// Page -/+(비활성) · BO · M(그랜드마스터) · 슬롯 10개(Flash 버튼 + 페이더 + legend)
+// 콘솔 하단 물리 페이더 스트립 — Tiger Touch II 실기기 하단부 재현.
+// 밝은 회색 바디 + 흰색 캡 페이더 + 파란 Flash LED 버튼.
+// 좌측: Playback Page -/+ · BO · M(그랜드마스터). 우측: 슬롯 10개(Flash + 페이더 + legend).
 
 import { useSceneStore } from "../../../store/scene-store";
 import type { FaderSlot } from "../../../store/console-types";
 import { Fader } from "./Fader";
+
+const FADER_H = 150;
 
 function legendFor(
   slot: FaderSlot,
@@ -23,39 +26,58 @@ function legendFor(
   return g ? { text: `${g.name} M` } : null;
 }
 
-function FaderSlotColumn({ index, slot, legend }: { index: number; slot: FaderSlot; legend: { text: string; color?: string } | null }) {
-  const assigned = !!slot.assignment;
-  const accent = !assigned ? "#4a4a4a" : slot.assignment!.kind === "look" ? "#4A90D9" : "#5fae5a";
-
-  const flashDown = (e: React.PointerEvent) => {
+function FlashButton({ index, slot, assigned }: { index: number; slot: FaderSlot; assigned: boolean }) {
+  const down = (e: React.PointerEvent) => {
     e.preventDefault();
     if (assigned) useSceneStore.getState().setFlashHeld(index, true);
   };
-  const flashUp = () => {
+  const up = () => {
     if (assigned) useSceneStore.getState().setFlashHeld(index, false);
   };
+  return (
+    <button
+      onPointerDown={down}
+      onPointerUp={up}
+      onPointerLeave={up}
+      onPointerCancel={up}
+      disabled={!assigned}
+      title={assigned ? "Flash (누르는 동안 풀 밝기)" : undefined}
+      data-flash={`slot-${index + 1}`}
+      style={{
+        width: 30,
+        height: 20,
+        borderRadius: 3,
+        background: !assigned
+          ? "linear-gradient(180deg, #3a3a40, #2a2a30)"
+          : slot.flashHeld
+            ? "linear-gradient(180deg, #9fd4ff, #4aa0ff)"
+            : "linear-gradient(180deg, #3f7fd6, #1f4f9e)",
+        border: "1px solid #10233f",
+        boxShadow: assigned && slot.flashHeld
+          ? "0 0 9px #7ec4ffcc, inset 0 1px 0 rgba(255,255,255,0.6)"
+          : "inset 0 1px 0 rgba(255,255,255,0.25)",
+        cursor: assigned ? "pointer" : "default",
+        touchAction: "none",
+      }}
+    />
+  );
+}
+
+function FaderSlotColumn({
+  index,
+  slot,
+  legend,
+}: {
+  index: number;
+  slot: FaderSlot;
+  legend: { text: string; color?: string } | null;
+}) {
+  const assigned = !!slot.assignment;
+  const accent = !assigned ? "#9a9aa2" : slot.assignment!.kind === "look" ? "#2f7fe0" : "#3fae5a";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, width: 46 }}>
-      <button
-        onPointerDown={flashDown}
-        onPointerUp={flashUp}
-        onPointerLeave={flashUp}
-        onPointerCancel={flashUp}
-        disabled={!assigned}
-        title={assigned ? "Flash (누르는 동안 풀 밝기)" : undefined}
-        data-flash={`slot-${index + 1}`}
-        style={{
-          width: 30,
-          height: 22,
-          borderRadius: 4,
-          background: !assigned ? "#26262a" : slot.flashHeld ? "#7ec4ff" : "#2c4a7c",
-          border: "1px solid #16161a",
-          boxShadow: assigned && slot.flashHeld ? "0 0 8px #7ec4ffaa" : "none",
-          cursor: assigned ? "pointer" : "default",
-          touchAction: "none",
-        }}
-      />
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: 44 }}>
+      <FlashButton index={index} slot={slot} assigned={assigned} />
       <Fader
         label={`slot-${index + 1}`}
         level={slot.level}
@@ -63,19 +85,26 @@ function FaderSlotColumn({ index, slot, legend }: { index: number; slot: FaderSl
         onDoubleClick={() => assigned && useSceneStore.getState().setFaderLevel(index, 1)}
         disabled={!assigned}
         accent={accent}
-        height={130}
+        height={FADER_H}
       />
+      {/* 슬롯 번호 (실기기 프린트) */}
+      <div style={{ fontSize: 9, fontWeight: 700, color: "#4a4a52" }}>{index + 1}</div>
+      {/* legend 테이프 (실기기 라벨 테이프 느낌) */}
       <div
         style={{
-          fontSize: 9,
-          color: legend ? "#c8d8ee" : "#555",
+          fontSize: 8.5,
+          color: legend ? "#1a2a44" : "#9a9aa2",
           textAlign: "center",
-          lineHeight: 1.25,
-          minHeight: 22,
+          lineHeight: 1.2,
+          minHeight: 20,
+          width: 42,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           gap: 2,
+          background: legend ? "#f4e58a" : "transparent",
+          borderRadius: 2,
+          padding: legend ? "1px 2px" : 0,
         }}
       >
         {legend?.color && (
@@ -85,11 +114,11 @@ function FaderSlotColumn({ index, slot, legend }: { index: number; slot: FaderSl
               height: 7,
               borderRadius: "50%",
               background: legend.color,
-              border: "1px solid rgba(255,255,255,0.4)",
+              border: "1px solid rgba(0,0,0,0.4)",
             }}
           />
         )}
-        <span style={{ wordBreak: "keep-all" }}>{legend ? legend.text : index + 1}</span>
+        <span style={{ wordBreak: "keep-all", fontWeight: 600 }}>{legend ? legend.text : ""}</span>
       </div>
     </div>
   );
@@ -103,21 +132,21 @@ export function FaderStrip() {
   const looks = useSceneStore((s) => s.looks);
 
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 14, padding: "8px 12px 10px" }}>
-      {/* Page -/+ (비활성, D-6 실기기 재현용) */}
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "8px 14px 12px" }}>
+      {/* Playback Page -/+ (비활성, 실기기 재현) */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-        <div style={{ fontSize: 9, color: "#777", marginBottom: 2 }}>Page</div>
-        <button disabled style={pageBtnStyle}>
+        <div style={{ fontSize: 9, color: "#5a5a62", fontWeight: 600, marginBottom: 2 }}>Page</div>
+        <button disabled style={pageBtnStyle} title="플레이백 페이지 (추후 개발)">
           −
         </button>
-        <button disabled style={pageBtnStyle}>
+        <button disabled style={pageBtnStyle} title="플레이백 페이지 (추후 개발)">
           +
         </button>
       </div>
 
       {/* BO */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-        <div style={{ fontSize: 9, color: "#777" }}>&nbsp;</div>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+        <div style={{ fontSize: 9, color: "#5a5a62" }}>&nbsp;</div>
         <button
           onClick={() => useSceneStore.getState().toggleBlackout()}
           title="블랙아웃 (B)"
@@ -125,37 +154,44 @@ export function FaderStrip() {
             width: 46,
             height: 46,
             borderRadius: 6,
-            background: blackout ? "#c0392b" : "#2a2a2a",
-            border: blackout ? "2px solid #ff6b5b" : "1px solid #444",
+            background: blackout
+              ? "linear-gradient(180deg, #e0503f, #b8291b)"
+              : "linear-gradient(180deg, #4a4a52, #303036)",
+            border: blackout ? "2px solid #ff8578" : "1px solid #26262c",
             color: "#fff",
-            fontWeight: 700,
-            fontSize: 12,
+            fontWeight: 800,
+            fontSize: 13,
             cursor: "pointer",
-            boxShadow: blackout ? "0 0 12px #ff6b5b99" : "none",
+            boxShadow: blackout
+              ? "0 0 12px #ff6b5baa, inset 0 1px 0 rgba(255,255,255,0.3)"
+              : "inset 0 1px 0 rgba(255,255,255,0.2)",
           }}
         >
           BO
         </button>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#5a5a62" }}>Blackout</div>
       </div>
 
-      {/* M(그랜드마스터) */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-        <div style={{ fontSize: 9, color: "#777" }}>&nbsp;</div>
+      {/* M (그랜드마스터) */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+        <div style={{ fontSize: 9, color: "#5a5a62" }}>&nbsp;</div>
+        <div style={{ height: 20 }} />
         <Fader
           label="grand-master"
           level={grandMaster}
           onChange={(v) => useSceneStore.getState().setGrandMaster(v)}
           onDoubleClick={() => useSceneStore.getState().setGrandMaster(1)}
           accent="#e0a030"
-          height={130}
+          height={FADER_H}
         />
-        <div style={{ fontSize: 10, color: "#e0a030", fontWeight: 700 }}>M</div>
+        <div style={{ fontSize: 11, color: "#8a5a10", fontWeight: 800 }}>M</div>
+        <div style={{ fontSize: 8.5, fontWeight: 600, color: "#5a5a62" }}>Grand</div>
       </div>
 
-      <div style={{ width: 1, alignSelf: "stretch", background: "#3a3a3a", margin: "0 2px" }} />
+      <div style={{ width: 2, alignSelf: "stretch", background: "#a0a0a6", margin: "0 4px", borderRadius: 2 }} />
 
       {/* 슬롯 1~10 */}
-      <div style={{ display: "flex", gap: 8, flex: 1, justifyContent: "space-between" }}>
+      <div style={{ display: "flex", gap: 6, flex: 1, justifyContent: "space-between" }}>
         {faderSlots.map((slot, i) => (
           <FaderSlotColumn key={i} index={i} slot={slot} legend={legendFor(slot, groups, looks)} />
         ))}
@@ -165,12 +201,12 @@ export function FaderStrip() {
 }
 
 const pageBtnStyle: React.CSSProperties = {
-  width: 30,
+  width: 34,
   height: 20,
   borderRadius: 3,
-  background: "#242424",
-  border: "1px solid #3a3a3a",
-  color: "#666",
-  fontSize: 12,
+  background: "linear-gradient(180deg, #e8e8ec, #cfcfd4)",
+  border: "1px solid #a0a0a6",
+  color: "#8a8a90",
+  fontSize: 13,
   cursor: "not-allowed",
 };
