@@ -15,7 +15,7 @@
 //   - Playbacks     → 룩 저장/적용/페이더 할당 (실동작)
 //   - 우측 Program Menu / Workspaces / I P C G B E S FX 탭 → 실기기 외형 재현(비활성 장식)
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSceneStore } from "../../../store/scene-store";
 import type { FixtureType } from "../../../config/fixtures.config";
 import type { FaderAssignment, ShapeType, EffectDef } from "../../../store/console-types";
@@ -703,6 +703,8 @@ function EffectRow({ eff }: { eff: EffectDef }) {
   );
 }
 
+// 실기기 인코더 휠 감각 재현: 슬라이더 위에서 마우스 스크롤 = 값 미세조정
+// (Shift=더 미세). 휠 리스너는 passive:false로 붙여 페이지/창 스크롤을 막는다.
 function EffSlider({
   label,
   value,
@@ -714,8 +716,37 @@ function EffSlider({
   onChange: (t: number) => void;
   readout: string;
 }) {
+  const ref = useRef<HTMLLabelElement>(null);
+  // acc는 로컬 누적값 — 빠른 스크롤에서 리렌더보다 이벤트가 앞서도 매끄럽게 누적된다.
+  // value가 외부 변경으로 바뀌면(리렌더 후) acc를 그 권위값으로 리싱크한다.
+  const acc = useRef(value);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    acc.current = value;
+  }, [value]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = e.shiftKey ? 0.01 : 0.03;
+      const dir = e.deltaY < 0 ? 1 : -1;
+      const next = Math.max(0, Math.min(1, acc.current + dir * step));
+      acc.current = next;
+      onChangeRef.current(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   return (
-    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 9, color: "#9ab8e0" }}>
+    <label
+      ref={ref}
+      title="스크롤로 조절 (Shift=미세)"
+      style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 9, color: "#9ab8e0" }}
+    >
       <span style={{ width: 26, flex: "0 0 auto" }}>{label}</span>
       <input
         type="range"
