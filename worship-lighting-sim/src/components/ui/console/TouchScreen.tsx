@@ -721,6 +721,8 @@ function EffectRow({ eff }: { eff: EffectDef }) {
   const groupSize = useSceneStore(
     (s) => s.groups.find((g) => g.id === eff.groupId)?.fixtureIds.length ?? 0,
   );
+  const bpm = useSceneStore((s) => s.bpm); // 이펙트 속도를 BPM으로 환산해 표시(전역 템포 동기)
+  const effBpm = Math.round(bpm / eff.beatsPerCycle); // 분당 사이클 수
   const set = (patch: Partial<EffectDef>) => useSceneStore.getState().updateEffect(eff.id, patch);
   // 위상(spread)이 360을 정수로 나누면 몇 분할인지 표기 (180→2분할, 120→3분할 …)
   const splitOf = (deg: number) => (deg > 0 && Math.abs(360 / deg - Math.round(360 / deg)) < 0.02 ? Math.round(360 / deg) : 0);
@@ -784,12 +786,12 @@ function EffectRow({ eff }: { eff: EffectDef }) {
       />
       <EffSlider
         label="속도"
-        // beatsPerCycle 0.5(빠름)..16(느림) → 슬라이더는 빠를수록 오른쪽
+        // beatsPerCycle 0.5(빠름)..16(느림) → 슬라이더는 빠를수록 오른쪽(=BPM 높을수록)
         value={1 - (eff.beatsPerCycle - 0.5) / 15.5}
         onChange={(t) => set({ beatsPerCycle: +(0.5 + (1 - t) * 15.5).toFixed(2) })}
-        readout={`${eff.beatsPerCycle}박/회`}
-        rawValue={eff.beatsPerCycle}
-        onCommitRaw={(n) => set({ beatsPerCycle: clampN(+n.toFixed(2), 0.5, 16) })}
+        readout={`${effBpm} BPM`}
+        rawValue={effBpm}
+        onCommitRaw={(n) => n > 0 && set({ beatsPerCycle: clampN(+(bpm / n).toFixed(2), 0.5, 16) })}
       />
       <EffSlider
         label="위상"

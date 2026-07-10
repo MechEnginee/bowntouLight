@@ -252,13 +252,6 @@ export function AudioTimeline({
           background: "linear-gradient(180deg, #16203a, #101828)",
         }}
       >
-        <button
-          onClick={() => useAudioStore.getState().toggleCollapsed()}
-          style={hdrBtn}
-          title={collapsed ? "타임라인 펼치기" : "타임라인 접기"}
-        >
-          {collapsed ? "▲" : "▼"}
-        </button>
         <span style={{ fontSize: 11, fontWeight: 700, color: "#9ab8e0" }}>🎵 음원 타임라인</span>
 
         {loaded && (
@@ -285,6 +278,14 @@ export function AudioTimeline({
             ✕
           </button>
         )}
+        {/* 접기 버튼 — 다른 패널들처럼 오른쪽 끝 */}
+        <button
+          onClick={() => useAudioStore.getState().toggleCollapsed()}
+          style={hdrBtn}
+          title={collapsed ? "타임라인 펼치기" : "타임라인 접기"}
+        >
+          {collapsed ? "▲ 펼치기" : "▼ 접기"}
+        </button>
       </div>
 
       {/* 본문: 파형 + 마커 + 플레이헤드 */}

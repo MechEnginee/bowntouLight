@@ -1320,12 +1320,14 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         i === slotIndex ? { ...sl, level: clamped } : sl,
       );
 
-      // 룩 슬롯의 0→상승 에지: 색/pan/tilt/on 래치 페이드 (undo 미기록)
+      // 룩 슬롯의 0→상승 에지: 색/pan/tilt 래치 페이드 (undo 미기록).
+      // on은 래치하지 않는다 — 페이더 밝기는 HTP(pb)로만 흐르고, 빔 점등은 유효밝기>0로 판정.
+      // (on을 켜면 직접경로 f.dimmer가 풀로 기여해 페이더가 무시되고 제어패널 on이 켜지는 문제)
       if (a?.kind === "look" && wasZero && becomesPositive) {
         const look = s.looks.find((l) => l.id === a.lookId);
         if (look) {
           for (const [fid, lv] of Object.entries(look.values)) {
-            if (s.fixtures[fid]) startFade(fid, lv, look.fadeMs, false);
+            if (s.fixtures[fid]) startFade(fid, { ...lv, on: undefined }, look.fadeMs, false);
           }
         }
       }
@@ -1340,13 +1342,13 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       const faderSlots = s.faderSlots.map((sl, i) =>
         i === slotIndex ? { ...sl, flashHeld: held } : sl,
       );
-      // 룩 슬롯: 레벨이 0인 상태에서 Flash를 누르면 활성화 에지로 간주해 래치도 발동
+      // 룩 슬롯: 레벨이 0인 상태에서 Flash를 누르면 활성화 에지로 간주해 래치도 발동 (on 제외)
       const a = slot.assignment;
       if (held && slot.level <= 0 && a?.kind === "look") {
         const look = s.looks.find((l) => l.id === a.lookId);
         if (look) {
           for (const [fid, lv] of Object.entries(look.values)) {
-            if (s.fixtures[fid]) startFade(fid, lv, look.fadeMs, false);
+            if (s.fixtures[fid]) startFade(fid, { ...lv, on: undefined }, look.fadeMs, false);
           }
         }
       }
