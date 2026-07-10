@@ -47,10 +47,15 @@ export function AudioTimeline({
     playing,
     collapsed,
     markers,
+    savedDuration,
+    awaitingRelink,
   } = useAudioStore();
 
   const trackRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
+  const relinkInputRef = useRef<HTMLInputElement>(null);
+  // 길이 불일치로 확인 대기 중인 선택 파일 (예=교체 / 아니요=취소)
+  const [mismatch, setMismatch] = useState<{ fileName: string; duration: number; peaks: number[] } | null>(null);
   const [width, setWidth] = useState(0);
   const info = useRef({ width: 0, duration: 0 });
   info.current = { width, duration };
@@ -94,17 +99,40 @@ export function AudioTimeline({
     return () => cancelAnimationFrame(id);
   }, [playing]);
 
+  const MATCH_TOL = 1.0; // 동일 음원 판정 허용 오차(초)
+
   const handleFile = async (file: File) => {
     const store = useAudioStore.getState();
     store.setAnalyzing(true);
     try {
       const metaDur = await loadAudioFile(file);
       const { peaks: pk, duration: d } = await computeWaveform(file);
-      store.setLoaded(file.name, d || metaDur, pk);
+      const dur = d || metaDur;
+      const expected = store.savedDuration;
+      if (expected > 0 && Math.abs(dur - expected) > MATCH_TOL) {
+        // 길이 불일치 → "동일 음원이 아닙니다" 확인 팝업
+        setMismatch({ fileName: file.name, duration: dur, peaks: pk });
+        store.setAnalyzing(false);
+        return;
+      }
+      // 길이 일치(또는 기대값 없음) → 로드 + 메모 유지(노트 매핑)
+      store.setLoaded(file.name, dur, pk);
       movePlayhead(0);
     } catch (e) {
       store.setError(e instanceof Error ? e.message : "오디오를 불러올 수 없습니다");
     }
+  };
+
+  // 길이 불일치 확인: 예=메모 지우고 이 음원으로 교체 / 아니요=로딩 취소(음원값 비움)
+  const confirmMismatchYes = () => {
+    if (!mismatch) return;
+    useAudioStore.getState().replaceAudio(mismatch.fileName, mismatch.duration, mismatch.peaks);
+    setMismatch(null);
+    movePlayhead(0);
+  };
+  const confirmMismatchNo = () => {
+    useAudioStore.getState().clearAudio();
+    setMismatch(null);
   };
 
   const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -340,8 +368,105 @@ export function AudioTimeline({
           )}
         </div>
       )}
+
+      {/* 재링크 전용 숨은 파일 입력 ("파일 찾기" → 탐색기) */}
+      <input
+        ref={relinkInputRef}
+        type="file"
+        accept="audio/*,.mp3,.m4a,.aac,.wav"
+        onChange={onPickFile}
+        data-testid="relink-input"
+        style={{ display: "none" }}
+      />
+
+      {/* 팝업 ①: 저장된 음원 파일이 없음 → 찾기 */}
+      {awaitingRelink && !mismatch && !analyzing && (
+        <Modal>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>음원 파일이 없습니다</div>
+          <div style={{ fontSize: 12, color: "#c8d8ee", marginBottom: 14, lineHeight: 1.5 }}>
+            이 씬에 저장된 메모 {markers.length}개가 있습니다.
+            <br />
+            원본 음원 <b style={{ color: "#9ec8ff" }}>"{fileName}"</b>을(를) 찾으시겠습니까?
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button style={dlgBtn(false)} onClick={() => useAudioStore.getState().dismissRelink()}>
+              나중에
+            </button>
+            <button style={dlgBtn(true)} onClick={() => relinkInputRef.current?.click()}>
+              📂 파일 찾기
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* 팝업 ②: 길이 불일치 → 이 음원으로 할지 */}
+      {mismatch && (
+        <Modal>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>동일 음원이 아닙니다</div>
+          <div style={{ fontSize: 12, color: "#c8d8ee", marginBottom: 6, lineHeight: 1.5 }}>
+            길이가 다릅니다 — 저장된 음원 <b>{fmt(savedDuration)}</b> · 선택한 파일{" "}
+            <b>{fmt(mismatch.duration)}</b>
+            <br />이 음원으로 하시겠습니까?
+          </div>
+          <div style={{ fontSize: 10.5, color: "#8fa6c8", marginBottom: 14 }}>
+            예 = 기존 메모를 지우고 이 음원으로 새로 시작 · 아니요 = 로딩 취소(음원 비움)
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button style={dlgBtn(false)} onClick={confirmMismatchNo}>
+              아니요
+            </button>
+            <button style={dlgBtn(true)} onClick={confirmMismatchYes}>
+              예 (이 음원으로)
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
+}
+
+function Modal({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(4,8,16,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          background: "#141d30",
+          border: "1px solid #2a3a58",
+          borderRadius: 8,
+          boxShadow: "0 8px 30px rgba(0,0,0,0.6)",
+          padding: "16px 18px",
+          minWidth: 320,
+          maxWidth: 440,
+          color: "#e6eefc",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function dlgBtn(primary: boolean): React.CSSProperties {
+  return {
+    fontSize: 12,
+    fontWeight: 700,
+    padding: "6px 14px",
+    borderRadius: 5,
+    border: primary ? "1px solid #4aa0ff" : "1px solid #33425f",
+    background: primary ? "linear-gradient(180deg,#4aa0ff,#1f6fd6)" : "#1b2338",
+    color: primary ? "#fff" : "#9ab8e0",
+    cursor: "pointer",
+  };
 }
 
 const hdrBtn: React.CSSProperties = {

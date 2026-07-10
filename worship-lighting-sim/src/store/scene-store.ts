@@ -91,9 +91,10 @@ export interface SceneFile {
     /** 사용자가 Colours 창에 추가한 커스텀 색(#rrggbb) */
     customColors?: string[];
   };
-  /** v2+: 음원 타임라인 — 파일명+메모 마커만 저장(오디오 원본은 재로드). */
+  /** v2+: 음원 타임라인 — 파일명+길이+메모 마커 저장(오디오 원본은 재로드). */
   audio?: {
     fileName: string | null;
+    duration?: number; // 초 — 재링크 시 동일 음원 판정용
     markers: Array<{ id: string; time: number; text: string; color?: string }>;
   };
 }
@@ -765,7 +766,11 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       },
       audio: (() => {
         const a = useAudioStore.getState();
-        return { fileName: a.fileName, markers: a.markers.map((m) => ({ ...m })) };
+        return {
+          fileName: a.fileName,
+          duration: a.loaded ? a.duration : a.savedDuration,
+          markers: a.markers.map((m) => ({ ...m })),
+        };
       })(),
     };
   },
@@ -875,7 +880,9 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
             .map((m) => ({ id: typeof m.id === "string" ? m.id : genId(), time: m.time, text: m.text, color: m.color }))
         : [];
       const fileName = typeof rawAudio?.fileName === "string" ? rawAudio.fileName : null;
-      useAudioStore.getState().restoreFromScene(fileName, markers);
+      const audioDur =
+        typeof rawAudio?.duration === "number" && Number.isFinite(rawAudio.duration) ? rawAudio.duration : 0;
+      useAudioStore.getState().restoreFromScene(fileName, audioDur, markers);
     }
     return { ok: true };
   },
