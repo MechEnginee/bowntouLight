@@ -15,6 +15,7 @@ function legendFor(
   slot: FaderSlot,
   groups: { id: string; name: string }[],
   looks: { id: string; name: string; values: Record<string, { color?: string }> }[],
+  effects: { id: string; name: string }[],
 ): { text: string; color?: string } | null {
   const a = slot.assignment;
   if (!a) return null;
@@ -23,6 +24,10 @@ function legendFor(
     if (!l) return null;
     const sw = Object.values(l.values).find((v) => v.color)?.color;
     return { text: l.name, color: sw };
+  }
+  if (a.kind === "effect") {
+    const e = effects.find((x) => x.id === a.effectId);
+    return e ? { text: `✦ ${e.name}` } : null;
   }
   const g = groups.find((x) => x.id === a.groupId);
   return g ? { text: `${g.name} M` } : null;
@@ -75,7 +80,8 @@ function FaderSlotColumn({
   legend: { text: string; color?: string } | null;
 }) {
   const assigned = !!slot.assignment;
-  const accent = !assigned ? "#9a9aa2" : slot.assignment!.kind === "look" ? "#2f7fe0" : "#3fae5a";
+  const kind = slot.assignment?.kind;
+  const accent = !assigned ? "#9a9aa2" : kind === "look" ? "#2f7fe0" : kind === "effect" ? "#a45cff" : "#3fae5a";
 
   return (
     <div
@@ -207,6 +213,7 @@ export function FaderStrip() {
   const blackout = useSceneStore((s) => s.blackout);
   const groups = useSceneStore((s) => s.groups);
   const looks = useSceneStore((s) => s.looks);
+  const effects = useSceneStore((s) => s.effects);
 
   return (
     <div
@@ -274,7 +281,7 @@ export function FaderStrip() {
       {/* 슬롯 1~10 */}
       <div style={{ display: "flex", gap: 6, flex: 1, justifyContent: "space-between", alignItems: "stretch", minHeight: 0 }}>
         {faderSlots.map((slot, i) => (
-          <FaderSlotColumn key={i} index={i} slot={slot} legend={legendFor(slot, groups, looks)} />
+          <FaderSlotColumn key={i} index={i} slot={slot} legend={legendFor(slot, groups, looks, effects)} />
         ))}
       </div>
     </div>

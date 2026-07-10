@@ -22,9 +22,27 @@ let rafHandle: number | null = null;
 let lastTime = 0;
 let beats = 0; // 누적 박자(위상 기준)
 
+/**
+ * 이펙트 강도(0..1). 페이더 슬롯에 올라가 있으면 그 레벨(Flash=1)이 크기를 제어(실기기 방식).
+ * 슬롯에 없으면 화면 실행 버튼(running)으로 0/1.
+ */
+function effectIntensity(
+  state: ReturnType<typeof useSceneStore.getState>,
+  effectId: string,
+  running: boolean,
+): number {
+  const slot = state.faderSlots.find(
+    (sl) => sl.assignment?.kind === "effect" && sl.assignment.effectId === effectId,
+  );
+  if (slot) return slot.flashHeld ? 1 : slot.level;
+  return running ? 1 : 0;
+}
+
 // effect: 이펙트 정의, base: 시간 위상(rad), phaseK: 이 픽스처의 위상 오프셋(rad)
-function shapeOffset(effect: EffectDef, base: number, phaseK: number, acc: LiveOffset) {
-  const { shape, size } = effect;
+// intensity: 페이더 레벨(0..1) — 크기/깊이를 스케일(실기기: 페이더가 셰이프 크기를 제어)
+function shapeOffset(effect: EffectDef, base: number, phaseK: number, acc: LiveOffset, intensity: number) {
+  const { shape } = effect;
+  const size = effect.size * intensity;
   const phase = base + phaseK;
   switch (shape) {
     case "circle":
@@ -64,12 +82,15 @@ function tick(now: number) {
   lastTime = now;
   beats += dt * (state.bpm / 60);
 
-  const running = state.effects.filter((e) => e.running);
   const offsets: Record<string, LiveOffset> = {};
+  let activeCount = 0;
 
-  for (const eff of running) {
+  for (const eff of state.effects) {
+    const intensity = effectIntensity(state, eff.id, eff.running);
+    if (intensity <= 0) continue;
     const group = state.groups.find((g) => g.id === eff.groupId);
     if (!group || group.fixtureIds.length === 0) continue;
+    activeCount++;
     const ids = group.fixtureIds;
     const spreadRad = d2r(eff.spread); // 픽스처당 위상차 (Titan Phase 모델)
     const base = (TAU * beats) / Math.max(0.01, eff.beatsPerCycle) * eff.direction;
@@ -78,13 +99,13 @@ function tick(now: number) {
       if (!state.fixtures[id]) return;
       const phaseK = spreadRad * k;
       const acc = offsets[id] ?? (offsets[id] = { pan: 0, tilt: 0, dimMul: 1 });
-      shapeOffset(eff, base, phaseK, acc);
+      shapeOffset(eff, base, phaseK, acc, intensity);
     });
   }
 
   useSceneStore.getState().setLiveOffsets(offsets);
 
-  if (running.length > 0) {
+  if (activeCount > 0) {
     rafHandle = requestAnimationFrame(tick);
   } else {
     rafHandle = null;
@@ -92,12 +113,13 @@ function tick(now: number) {
   }
 }
 
-/** 이펙트 상태 변경 후 호출 — 실행 중 이펙트가 있으면 루프를 켠다. */
+/** 이펙트 상태 변경(실행/정지, 페이더 레벨 등) 후 호출 — 활성 이펙트가 있으면 루프를 켠다. */
 export function syncEffectEngine(): void {
-  const anyRunning = useSceneStore.getState().effects.some((e) => e.running);
-  if (anyRunning && rafHandle == null) {
+  const state = useSceneStore.getState();
+  const anyActive = state.effects.some((e) => effectIntensity(state, e.id, e.running) > 0);
+  if (anyActive && rafHandle == null) {
     lastTime = 0;
     rafHandle = requestAnimationFrame(tick);
   }
-  // 실행 중이 없으면 tick이 스스로 멈추며 마지막에 빈 offsets를 써서 원위치 복귀.
+  // 활성 이펙트가 없으면 tick이 스스로 멈추며 마지막에 빈 offsets를 써서 원위치 복귀.
 }

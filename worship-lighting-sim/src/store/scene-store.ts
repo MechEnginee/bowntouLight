@@ -605,9 +605,11 @@ function coerceFaderSlots(
   raw: unknown,
   groups: FixtureGroupDef[],
   looks: LookDef[],
+  effects: EffectDef[],
 ): FaderSlot[] {
   const validGroupIds = new Set(groups.map((g) => g.id));
   const validLookIds = new Set(looks.map((l) => l.id));
+  const validEffectIds = new Set(effects.map((e) => e.id));
   const arr = Array.isArray(raw) ? raw : [];
   return Array.from({ length: FADER_SLOT_COUNT }, (_, i) => {
     const o = arr[i];
@@ -625,6 +627,13 @@ function coerceFaderSlots(
         validGroupIds.has(a.groupId)
       ) {
         assignment = { kind: "groupMaster", groupId: a.groupId };
+      } else if (
+        a &&
+        a.kind === "effect" &&
+        typeof a.effectId === "string" &&
+        validEffectIds.has(a.effectId)
+      ) {
+        assignment = { kind: "effect", effectId: a.effectId };
       }
       if (typeof so.level === "number" && Number.isFinite(so.level)) level = clamp01(so.level);
     }
@@ -827,9 +836,9 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     // v2 콘솔 섹션 (v1이거나 부재 시 빈 콘솔로 초기화 — 하위호환 하드 요구사항)
     const groups = coerceGroups(d.console?.groups, fixtures);
     const looks = coerceLooks(d.console?.looks, fixtures);
-    const faderSlots = coerceFaderSlots(d.console?.faderSlots, groups, looks);
-    const grandMaster = clamp01(num(d.console?.grandMaster, 1));
     const effects = coerceEffects(d.console?.effects, groups);
+    const faderSlots = coerceFaderSlots(d.console?.faderSlots, groups, looks, effects);
+    const grandMaster = clamp01(num(d.console?.grandMaster, 1));
     const bpm = clamp(num(d.console?.bpm, DEFAULT_BPM), 20, 400);
     const customColors = Array.isArray(d.console?.customColors)
       ? Array.from(
@@ -1287,7 +1296,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     }),
 
   // ─── 콘솔: 페이더 ───
-  assignFader: (slotIndex, assignment) =>
+  assignFader: (slotIndex, assignment) => {
+    const prev = get().faderSlots[slotIndex]?.assignment;
     set((s) => {
       if (!s.faderSlots[slotIndex]) return {};
       const hist = record(s, null);
@@ -1300,9 +1310,13 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         i === slotIndex ? { assignment, level, flashHeld: false } : sl,
       );
       return { ...hist, faderSlots };
-    }),
+    });
+    // 이펙트가 얽힌 슬롯이면 엔진 재동기(화면 실행 → 페이더 제어 전환 등)
+    if (assignment?.kind === "effect" || prev?.kind === "effect") syncEffectEngine();
+  },
 
-  setFaderLevel: (slotIndex, level) =>
+  setFaderLevel: (slotIndex, level) => {
+    const wasEffect = get().faderSlots[slotIndex]?.assignment?.kind === "effect";
     set((s) => {
       const slot = s.faderSlots[slotIndex];
       if (!slot) return {};
@@ -1333,9 +1347,12 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       }
 
       return { faderSlots, groups }; // 라이브 조작 — undo 미기록
-    }),
+    });
+    if (wasEffect) syncEffectEngine(); // 이펙트 페이더 레벨 변화 → 엔진 시작/정지
+  },
 
-  setFlashHeld: (slotIndex, held) =>
+  setFlashHeld: (slotIndex, held) => {
+    const isEffect = get().faderSlots[slotIndex]?.assignment?.kind === "effect";
     set((s) => {
       const slot = s.faderSlots[slotIndex];
       if (!slot) return {};
@@ -1353,7 +1370,9 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         }
       }
       return { faderSlots }; // 라이브 조작 — undo 미기록
-    }),
+    });
+    if (isEffect) syncEffectEngine(); // 이펙트 슬롯 Flash → 엔진 시작/정지
+  },
 
   setGrandMaster: (level) => set({ grandMaster: clamp01(level) }),
 
@@ -1390,7 +1409,15 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     })),
 
   removeEffect: (id) => {
-    set((s) => ({ effects: s.effects.filter((e) => e.id !== id) }));
+    set((s) => ({
+      effects: s.effects.filter((e) => e.id !== id),
+      // 이 이펙트를 참조하는 페이더 슬롯 해제
+      faderSlots: s.faderSlots.map((sl) =>
+        sl.assignment?.kind === "effect" && sl.assignment.effectId === id
+          ? { ...sl, assignment: null }
+          : sl,
+      ),
+    }));
     syncEffectEngine();
   },
 
@@ -1401,7 +1428,14 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     syncEffectEngine();
   },
 
-  clearEffects: () => set({ effects: [], liveOffsets: {} }),
+  clearEffects: () =>
+    set((s) => ({
+      effects: [],
+      liveOffsets: {},
+      faderSlots: s.faderSlots.map((sl) =>
+        sl.assignment?.kind === "effect" ? { ...sl, assignment: null } : sl,
+      ),
+    })),
 
   setBpm: (bpm) => set({ bpm: clamp(bpm, 20, 400) }),
 

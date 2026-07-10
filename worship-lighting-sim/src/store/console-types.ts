@@ -28,7 +28,8 @@ export interface LookDef {
 
 export type FaderAssignment =
   | { kind: "look"; lookId: string }
-  | { kind: "groupMaster"; groupId: string };
+  | { kind: "groupMaster"; groupId: string }
+  | { kind: "effect"; effectId: string };
 
 export interface FaderSlot {
   assignment: FaderAssignment | null;

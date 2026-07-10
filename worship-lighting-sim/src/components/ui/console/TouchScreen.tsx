@@ -723,7 +723,21 @@ function EffectRow({ eff }: { eff: EffectDef }) {
   );
   const bpm = useSceneStore((s) => s.bpm); // 이펙트 속도를 BPM으로 환산해 표시(전역 템포 동기)
   const effBpm = Math.round(bpm / eff.beatsPerCycle); // 분당 사이클 수
+  // 이 이펙트가 올라간 페이더 슬롯(-1=없음). 있으면 페이더가 크기를 제어(실기기 방식).
+  const slotIndex = useSceneStore((s) =>
+    s.faderSlots.findIndex((sl) => sl.assignment?.kind === "effect" && sl.assignment.effectId === eff.id),
+  );
+  const onFader = slotIndex >= 0;
   const set = (patch: Partial<EffectDef>) => useSceneStore.getState().updateEffect(eff.id, patch);
+  const assignToFader = () => {
+    const slots = useSceneStore.getState().faderSlots;
+    const idx = slots.findIndex((s) => s.assignment === null);
+    if (idx < 0) {
+      alert("빈 페이더 슬롯이 없습니다.");
+      return;
+    }
+    useSceneStore.getState().assignFader(idx, { kind: "effect", effectId: eff.id });
+  };
   // 위상(spread)이 360을 정수로 나누면 몇 분할인지 표기 (180→2분할, 120→3분할 …)
   const splitOf = (deg: number) => (deg > 0 && Math.abs(360 / deg - Math.round(360 / deg)) < 0.02 ? Math.round(360 / deg) : 0);
   const curSplit = splitOf(eff.spread);
@@ -741,26 +755,52 @@ function EffectRow({ eff }: { eff: EffectDef }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        {/* 페이더에 올라가 있으면 그 페이더가 실행/크기를 제어 → 화면 실행버튼 대신 슬롯 표시 */}
         <button
           onClick={() => useSceneStore.getState().toggleEffect(eff.id)}
-          title={eff.running ? "정지" : "실행"}
+          disabled={onFader}
+          title={onFader ? `페이더 ${slotIndex + 1}에서 제어` : eff.running ? "정지" : "실행"}
           style={{
             width: 20,
             height: 18,
             borderRadius: 3,
             border: "1px solid #10233f",
-            background: eff.running ? "linear-gradient(180deg,#4aa0ff,#1f6fd6)" : "#2a2a30",
+            background: onFader
+              ? "#2a2a30"
+              : eff.running
+                ? "linear-gradient(180deg,#4aa0ff,#1f6fd6)"
+                : "#2a2a30",
             color: "#fff",
             fontSize: 9,
-            cursor: "pointer",
+            cursor: onFader ? "default" : "pointer",
+            opacity: onFader ? 0.5 : 1,
             flex: "0 0 auto",
           }}
         >
-          {eff.running ? "⏸" : "▶"}
+          {eff.running && !onFader ? "⏸" : "▶"}
         </button>
         <span style={{ fontSize: 10, color: "#dce8f8", fontWeight: 600, flex: 1, wordBreak: "keep-all" }}>
           {eff.name}
         </span>
+        {/* 페이더 할당/해제 (실기기: 셰이프를 플레이백에 올려 페이더로 실행) */}
+        <button
+          onClick={() =>
+            onFader ? useSceneStore.getState().assignFader(slotIndex, null) : assignToFader()
+          }
+          title={onFader ? `페이더 ${slotIndex + 1}에서 내리기` : "페이더에 올리기(페이더로 크기 제어)"}
+          style={{
+            ...miniBtn,
+            width: "auto",
+            padding: "0 5px",
+            fontSize: 8.5,
+            fontWeight: 700,
+            color: onFader ? "#fff" : "#c9a6ff",
+            background: onFader ? "#7a3fd6" : "#241a38",
+            borderColor: "#5a3f8c",
+          }}
+        >
+          {onFader ? `▸F${slotIndex + 1}` : "▸페이더"}
+        </button>
         <button
           onClick={() => useSceneStore.getState().updateEffect(eff.id, { direction: eff.direction === 1 ? -1 : 1 })}
           title="진행 방향 반전"
