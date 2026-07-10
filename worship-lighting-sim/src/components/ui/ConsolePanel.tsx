@@ -19,6 +19,7 @@ export function ConsolePanel({
   onHeightChange: (h: number) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [faderHeight, setFaderHeight] = useState(235); // 페이더 영역 높이(터치스크린과의 경계 드래그)
 
   return (
     <div
@@ -88,9 +89,15 @@ export function ConsolePanel({
           <div style={{ flex: "1 1 auto", minHeight: 0, padding: "8px 12px 4px" }}>
             <TouchScreen />
           </div>
+          {/* 터치스크린 ↔ 페이더 경계 드래그로 페이더 영역 높이 조절 */}
+          <ResizeHandle
+            orientation="horizontal"
+            onDelta={(d) => setFaderHeight((h) => Math.max(120, Math.min(380, h - d)))}
+          />
           <div
             style={{
-              flex: `0 0 auto`,
+              flex: `0 0 ${faderHeight}px`,
+              overflow: "hidden",
               borderTop: "2px solid #8c8c92",
               background: "linear-gradient(180deg, #cfcfd4, #bcbcc2)",
             }}

@@ -32,6 +32,8 @@ function findEmptySlot(faderSlots: { assignment: FaderAssignment | null }[]): nu
   return faderSlots.findIndex((s) => s.assignment === null);
 }
 
+const clampN = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
 function slotSubmenu(
   faderSlots: { assignment: FaderAssignment | null }[],
   onPick: (slotIndex: number) => void,
@@ -777,6 +779,8 @@ function EffectRow({ eff }: { eff: EffectDef }) {
         value={isDim ? eff.size : eff.size / 90}
         onChange={(t) => set({ size: isDim ? t : Math.round(t * 90) })}
         readout={isDim ? `${Math.round(eff.size * 100)}%` : `${eff.size}°`}
+        rawValue={isDim ? Math.round(eff.size * 100) : eff.size}
+        onCommitRaw={(n) => set({ size: isDim ? clampN(n / 100, 0, 1) : clampN(Math.round(n), 0, 90) })}
       />
       <EffSlider
         label="속도"
@@ -784,12 +788,16 @@ function EffectRow({ eff }: { eff: EffectDef }) {
         value={1 - (eff.beatsPerCycle - 0.5) / 15.5}
         onChange={(t) => set({ beatsPerCycle: +(0.5 + (1 - t) * 15.5).toFixed(2) })}
         readout={`${eff.beatsPerCycle}박/회`}
+        rawValue={eff.beatsPerCycle}
+        onCommitRaw={(n) => set({ beatsPerCycle: clampN(+n.toFixed(2), 0.5, 16) })}
       />
       <EffSlider
         label="위상"
         value={eff.spread / 360}
         onChange={(t) => set({ spread: Math.round(t * 360) })}
         readout={curSplit ? `${eff.spread}° ${curSplit}분할` : `${eff.spread}°`}
+        rawValue={eff.spread}
+        onCommitRaw={(n) => set({ spread: clampN(Math.round(n), 0, 360) })}
       />
       {/* 분할 프리셋 (실기기 Phase: 180=2분할, 120=3분할, 360/n=파도) + Step 토글 */}
       <div style={{ display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
@@ -844,18 +852,25 @@ function SplitBtn({ label, active, onClick }: { label: string; active: boolean; 
   );
 }
 
-// 실기기 인코더 휠 감각 재현: 슬라이더 위에서 마우스 스크롤 = 값 미세조정
-// (Shift=더 미세). 휠 리스너는 passive:false로 붙여 페이지/창 스크롤을 막는다.
+// 실기기 인코더 휠 감각 재현: 슬라이더 위에서 마우스 스크롤 = 값 미세조정(Shift=더 미세).
+// 읽는칸(readout) 더블클릭 = 실제 단위 값 직접 입력. 휠 리스너는 passive:false로 붙여
+// 페이지/창 스크롤을 막는다.
 function EffSlider({
   label,
   value,
   onChange,
   readout,
+  rawValue,
+  onCommitRaw,
 }: {
   label: string;
   value: number;
   onChange: (t: number) => void;
   readout: string;
+  /** 더블클릭 입력용 — 현재 실제 값(단위 그대로) */
+  rawValue?: number;
+  /** 더블클릭 입력 확정 — 파싱된 숫자를 넘김 */
+  onCommitRaw?: (n: number) => void;
 }) {
   const ref = useRef<HTMLLabelElement>(null);
   // acc는 로컬 누적값 — 빠른 스크롤에서 리렌더보다 이벤트가 앞서도 매끄럽게 누적된다.
@@ -863,6 +878,8 @@ function EffSlider({
   const acc = useRef(value);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
   useEffect(() => {
     acc.current = value;
   }, [value]);
@@ -882,10 +899,17 @@ function EffSlider({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
+  const canEdit = rawValue !== undefined && !!onCommitRaw;
+  const commit = () => {
+    const n = parseFloat(draft);
+    if (Number.isFinite(n)) onCommitRaw?.(n);
+    setEditing(false);
+  };
+
   return (
     <label
       ref={ref}
-      title="스크롤로 조절 (Shift=미세)"
+      title="스크롤로 조절 (Shift=미세) · 값 더블클릭=직접 입력"
       style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 9, color: "#9ab8e0" }}
     >
       <span style={{ width: 26, flex: "0 0 auto" }}>{label}</span>
@@ -898,7 +922,51 @@ function EffSlider({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         style={{ flex: 1, accentColor: "#4aa0ff", height: 14 }}
       />
-      <span style={{ width: 40, flex: "0 0 auto", textAlign: "right", color: "#c8d8ee" }}>{readout}</span>
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          onClick={(e) => e.preventDefault()}
+          style={{
+            width: 40,
+            flex: "0 0 auto",
+            background: "#0a0a14",
+            border: "1px solid #7ec4ff",
+            borderRadius: 3,
+            color: "#fff",
+            fontSize: 9,
+            textAlign: "right",
+            padding: "0 2px",
+          }}
+        />
+      ) : (
+        <span
+          onDoubleClick={
+            canEdit
+              ? (e) => {
+                  e.preventDefault();
+                  setDraft(String(rawValue));
+                  setEditing(true);
+                }
+              : undefined
+          }
+          style={{
+            width: 40,
+            flex: "0 0 auto",
+            textAlign: "right",
+            color: "#c8d8ee",
+            cursor: canEdit ? "text" : "default",
+          }}
+        >
+          {readout}
+        </span>
+      )}
     </label>
   );
 }

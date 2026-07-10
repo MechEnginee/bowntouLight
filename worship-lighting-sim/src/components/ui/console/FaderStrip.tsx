@@ -3,6 +3,7 @@
 // 밝은 회색 바디 + 흰색 캡 페이더 + 파란 Flash LED 버튼.
 // 좌측: Playback Page -/+ · BO · M(그랜드마스터). 우측: 슬롯 10개(Flash + 페이더 + legend).
 
+import { useState } from "react";
 import { useSceneStore } from "../../../store/scene-store";
 import type { FaderSlot } from "../../../store/console-types";
 import { Fader } from "./Fader";
@@ -127,6 +128,13 @@ function FaderSlotColumn({
 function BpmControl() {
   const bpm = useSceneStore((s) => s.bpm);
   const anyRunning = useSceneStore((s) => s.effects.some((e) => e.running));
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const commit = () => {
+    const n = parseFloat(draft);
+    if (Number.isFinite(n)) useSceneStore.getState().setBpm(n);
+    setEditing(false);
+  };
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
       <div style={{ fontSize: 9, color: "#5a5a62", fontWeight: 600 }}>Tempo</div>
@@ -151,9 +159,40 @@ function BpmControl() {
         TAP
       </button>
       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: "#2a2a30", fontVariantNumeric: "tabular-nums" }}>
-          {Math.round(bpm)}
-        </span>
+        {editing ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            style={{
+              width: 38,
+              background: "#fff",
+              border: "1px solid #4aa0ff",
+              borderRadius: 3,
+              color: "#111",
+              fontSize: 12,
+              fontWeight: 800,
+              textAlign: "right",
+              padding: "0 2px",
+            }}
+          />
+        ) : (
+          <span
+            onDoubleClick={() => {
+              setDraft(String(Math.round(bpm)));
+              setEditing(true);
+            }}
+            title="더블클릭=BPM 직접 입력"
+            style={{ fontSize: 13, fontWeight: 800, color: "#2a2a30", fontVariantNumeric: "tabular-nums", cursor: "text" }}
+          >
+            {Math.round(bpm)}
+          </span>
+        )}
         <span style={{ fontSize: 8, color: "#5a5a62", fontWeight: 700 }}>BPM</span>
       </div>
     </div>

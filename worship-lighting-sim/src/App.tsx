@@ -113,6 +113,7 @@ export default function App() {
   const [leftWidth, setLeftWidth] = useState(260);
   const [rightWidth, setRightWidth] = useState(260);
   const [consoleHeight, setConsoleHeight] = useState(480);
+  const [audioHeight, setAudioHeight] = useState(104);
   const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
   // ─── 전역 키보드 단축키 ───
@@ -565,8 +566,11 @@ export default function App() {
       <ControlPanel width={rightWidth} />
       </div>
 
-      {/* 3D 뷰와 콘솔 사이: 음원 타임라인(연습용) */}
-      <AudioTimeline />
+      {/* 3D 뷰와 콘솔 사이: 음원 타임라인(연습용) — 상단 가장자리 드래그로 높이 조절 */}
+      <AudioTimeline
+        height={audioHeight}
+        onHeightChange={(h) => setAudioHeight(clamp(h, 60, 420))}
+      />
 
       <ConsolePanel
         height={consoleHeight}

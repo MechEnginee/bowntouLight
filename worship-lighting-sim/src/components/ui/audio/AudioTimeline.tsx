@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAudioStore } from "../../../store/audio-store";
 import { WaveformCanvas } from "./WaveformCanvas";
 import { computeWaveform } from "./waveform";
+import { ResizeHandle } from "../ResizeHandle";
 import {
   loadAudioFile,
   playAudio,
@@ -20,7 +21,7 @@ import {
 } from "./audio-player";
 
 const HEADER_H = 28;
-const BODY_H = 104;
+export const AUDIO_BODY_DEFAULT = 104; // 본문(파형) 기본 높이 — App 초기값
 
 function fmt(t: number): string {
   const m = Math.floor(t / 60);
@@ -28,7 +29,14 @@ function fmt(t: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function AudioTimeline() {
+export function AudioTimeline({
+  height = AUDIO_BODY_DEFAULT,
+  onHeightChange,
+}: {
+  height?: number;
+  onHeightChange?: (h: number) => void;
+}) {
+  const bodyH = height; // 파형 본문 높이(리사이즈로 조절)
   const {
     fileName,
     duration,
@@ -167,7 +175,7 @@ export function AudioTimeline() {
   return (
     <div
       style={{
-        flex: `0 0 ${collapsed ? HEADER_H : HEADER_H + BODY_H}px`,
+        flex: `0 0 ${collapsed ? HEADER_H : HEADER_H + bodyH}px`,
         display: "flex",
         flexDirection: "column",
         background: "#0c1220",
@@ -176,6 +184,11 @@ export function AudioTimeline() {
         overflow: "hidden",
       }}
     >
+      {/* 상단 가장자리 드래그 = 타임라인 높이 조절 (펼쳐진 상태에서만) */}
+      {!collapsed && onHeightChange && (
+        <ResizeHandle orientation="horizontal" onDelta={(d) => onHeightChange(bodyH - d)} />
+      )}
+
       {/* 헤더: 접기 + 파일 + 컨트롤 */}
       <div
         style={{
@@ -225,15 +238,15 @@ export function AudioTimeline() {
 
       {/* 본문: 파형 + 마커 + 플레이헤드 */}
       {!collapsed && (
-        <div style={{ flex: `0 0 ${BODY_H}px`, position: "relative", padding: 6 }}>
+        <div style={{ flex: `0 0 ${bodyH}px`, position: "relative", padding: 6 }}>
           {loaded ? (
             <div
               ref={trackRef}
               onClick={onTrackClick}
               onContextMenu={onTrackContext}
-              style={{ position: "relative", width: "100%", height: BODY_H - 12, cursor: "text", userSelect: "none" }}
+              style={{ position: "relative", width: "100%", height: bodyH - 12, cursor: "text", userSelect: "none" }}
             >
-              <WaveformCanvas peaks={peaks} duration={duration} width={width} height={BODY_H - 12} />
+              <WaveformCanvas peaks={peaks} duration={duration} width={width} height={bodyH - 12} />
 
               {/* 마커 */}
               {duration > 0 &&
@@ -273,7 +286,7 @@ export function AudioTimeline() {
                       >
                         {m.text}
                       </span>
-                      <div style={{ width: 1, height: BODY_H - 24, background: m.color ?? "#ffd24a", opacity: 0.7 }} />
+                      <div style={{ width: 1, height: bodyH - 24, background: m.color ?? "#ffd24a", opacity: 0.7 }} />
                     </div>
                   );
                 })}
@@ -287,7 +300,7 @@ export function AudioTimeline() {
                   top: 0,
                   left: 0,
                   width: 2,
-                  height: BODY_H - 12,
+                  height: bodyH - 12,
                   background: "#ff5a4a",
                   boxShadow: "0 0 6px #ff5a4a",
                   pointerEvents: "none",
@@ -306,7 +319,7 @@ export function AudioTimeline() {
               }}
               style={{
                 width: "100%",
-                height: BODY_H - 12,
+                height: bodyH - 12,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
