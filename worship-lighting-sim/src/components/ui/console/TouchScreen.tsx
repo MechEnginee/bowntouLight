@@ -268,7 +268,9 @@ function ColoursWindow() {
   const apply = (hex: string) => {
     const s = useSceneStore.getState();
     if (s.selectedIds.length === 0) return;
-    s.update(s.selectedIds, { color: hex, on: true });
+    // 색만 적용한다 — on/dimmer는 건드리지 않는다(색과 밝기는 별개 어트리뷰트).
+    // on:true로 켜버리면 직접경로가 풀로 기여해 제어패널이 켜지고 페이더가 먹히지 않게 된다.
+    s.update(s.selectedIds, { color: hex });
   };
   const disabled = selectedIds.length === 0;
   return (
