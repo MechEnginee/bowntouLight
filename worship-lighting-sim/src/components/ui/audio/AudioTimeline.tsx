@@ -87,6 +87,29 @@ export function AudioTimeline({
     }
   };
 
+  // Space = 재생/일시정지 토글 (음원 활성 상태에서만). 텍스트 입력 중엔 무시.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" && e.key !== " ") return;
+      const t = e.target as HTMLElement | null;
+      const tag = (t?.tagName ?? "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || t?.isContentEditable) return;
+      const st = useAudioStore.getState();
+      if (!st.loaded) return;
+      e.preventDefault();
+      if (st.playing) {
+        pauseAudio();
+        st.setPlaying(false);
+      } else {
+        playAudio()
+          .then(() => useAudioStore.getState().setPlaying(true))
+          .catch(() => {});
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // 재생 중에만 도는 rAF — 플레이헤드 DOM만 이동(스토어/리렌더 없음)
   useEffect(() => {
     if (!playing) return;

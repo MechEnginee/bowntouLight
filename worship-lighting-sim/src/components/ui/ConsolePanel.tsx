@@ -25,7 +25,9 @@ export function ConsolePanel({
     <div
       data-testid="console-panel"
       style={{
-        flex: `0 0 ${collapsed ? HEADER_HEIGHT : height}px`,
+        // 기본 높이는 height(리사이즈로 정한 최대), 공간이 부족하면 줄어든다(0 1 + minHeight 0)
+        flex: `0 1 ${collapsed ? HEADER_HEIGHT : height}px`,
+        minHeight: collapsed ? HEADER_HEIGHT : HEADER_HEIGHT + 90,
         display: "flex",
         flexDirection: "column",
         background: "#c9c9ce",
@@ -86,7 +88,9 @@ export function ConsolePanel({
 
       {!collapsed && (
         <>
-          <div style={{ flex: "1 1 auto", minHeight: 0, padding: "8px 12px 4px" }}>
+          {/* basis 0으로 두어 페이더가 자기 높이를 먼저 확보하고, 남는 공간을 터치스크린이 채움.
+              공간 부족 시 페이더가 먼저 줄어든다(터치스크린은 내부 스크롤 유지). */}
+          <div style={{ flex: "1 1 0", minHeight: 0, padding: "8px 12px 4px" }}>
             <TouchScreen />
           </div>
           {/* 터치스크린 ↔ 페이더 경계 드래그로 페이더 영역 높이 조절 */}
@@ -96,7 +100,9 @@ export function ConsolePanel({
           />
           <div
             style={{
-              flex: `0 0 ${faderHeight}px`,
+              // 페이더 영역: 기본 faderHeight(최대), 공간 부족 시 축소 → FaderStrip이 페이더를 스케일
+              flex: `0 1 ${faderHeight}px`,
+              minHeight: 0,
               overflow: "hidden",
               borderTop: "2px solid #8c8c92",
               background: "linear-gradient(180deg, #cfcfd4, #bcbcc2)",

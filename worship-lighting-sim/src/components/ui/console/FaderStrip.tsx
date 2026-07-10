@@ -8,7 +8,8 @@ import { useSceneStore } from "../../../store/scene-store";
 import type { FaderSlot } from "../../../store/console-types";
 import { Fader } from "./Fader";
 
-const FADER_H = 150;
+// 페이더 높이는 CSS flex로 자동 스케일한다(측정 불필요) — 컬럼을 채우고 남는 세로 공간을
+// Fader가 flex:1로 가져간다. 창/콘솔이 작아지면 페이더도 함께 줄어든다.
 
 function legendFor(
   slot: FaderSlot,
@@ -77,7 +78,9 @@ function FaderSlotColumn({
   const accent = !assigned ? "#9a9aa2" : slot.assignment!.kind === "look" ? "#2f7fe0" : "#3fae5a";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: 44 }}>
+    <div
+      style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: 44, height: "100%", minHeight: 0 }}
+    >
       <FlashButton index={index} slot={slot} assigned={assigned} />
       <Fader
         label={`slot-${index + 1}`}
@@ -86,7 +89,6 @@ function FaderSlotColumn({
         onDoubleClick={() => assigned && useSceneStore.getState().setFaderLevel(index, 1)}
         disabled={!assigned}
         accent={accent}
-        height={FADER_H}
       />
       {/* 슬롯 번호 (실기기 프린트) */}
       <div style={{ fontSize: 9, fontWeight: 700, color: "#4a4a52" }}>{index + 1}</div>
@@ -136,7 +138,7 @@ function BpmControl() {
     setEditing(false);
   };
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
       <div style={{ fontSize: 9, color: "#5a5a62", fontWeight: 600 }}>Tempo</div>
       <button
         onClick={() => useSceneStore.getState().tapTempo()}
@@ -207,9 +209,11 @@ export function FaderStrip() {
   const looks = useSceneStore((s) => s.looks);
 
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 12, padding: "8px 14px 12px" }}>
+    <div
+      style={{ display: "flex", alignItems: "stretch", gap: 12, padding: "8px 14px 12px", height: "100%", boxSizing: "border-box", minHeight: 0 }}
+    >
       {/* Playback Page -/+ (비활성, 실기기 재현) */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
         <div style={{ fontSize: 9, color: "#5a5a62", fontWeight: 600, marginBottom: 2 }}>Page</div>
         <button disabled style={pageBtnStyle} title="플레이백 페이지 (추후 개발)">
           −
@@ -220,7 +224,7 @@ export function FaderStrip() {
       </div>
 
       {/* BO */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 5 }}>
         <div style={{ fontSize: 9, color: "#5a5a62" }}>&nbsp;</div>
         <button
           onClick={() => useSceneStore.getState().toggleBlackout()}
@@ -248,19 +252,18 @@ export function FaderStrip() {
       </div>
 
       {/* M (그랜드마스터) */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-        <div style={{ fontSize: 9, color: "#5a5a62" }}>&nbsp;</div>
-        <div style={{ height: 20 }} />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, height: "100%", minHeight: 0 }}>
+        <div style={{ fontSize: 9, color: "#5a5a62", flex: "0 0 auto" }}>&nbsp;</div>
+        <div style={{ height: 20, flex: "0 0 auto" }} />
         <Fader
           label="grand-master"
           level={grandMaster}
           onChange={(v) => useSceneStore.getState().setGrandMaster(v)}
           onDoubleClick={() => useSceneStore.getState().setGrandMaster(1)}
           accent="#e0a030"
-          height={FADER_H}
         />
-        <div style={{ fontSize: 11, color: "#8a5a10", fontWeight: 800 }}>M</div>
-        <div style={{ fontSize: 8.5, fontWeight: 600, color: "#5a5a62" }}>Grand</div>
+        <div style={{ fontSize: 11, color: "#8a5a10", fontWeight: 800, flex: "0 0 auto" }}>M</div>
+        <div style={{ fontSize: 8.5, fontWeight: 600, color: "#5a5a62", flex: "0 0 auto" }}>Grand</div>
       </div>
 
       {/* BPM / Tap Tempo (이펙트 속도 동기) */}
@@ -269,7 +272,7 @@ export function FaderStrip() {
       <div style={{ width: 2, alignSelf: "stretch", background: "#a0a0a6", margin: "0 4px", borderRadius: 2 }} />
 
       {/* 슬롯 1~10 */}
-      <div style={{ display: "flex", gap: 6, flex: 1, justifyContent: "space-between" }}>
+      <div style={{ display: "flex", gap: 6, flex: 1, justifyContent: "space-between", alignItems: "stretch", minHeight: 0 }}>
         {faderSlots.map((slot, i) => (
           <FaderSlotColumn key={i} index={i} slot={slot} legend={legendFor(slot, groups, looks)} />
         ))}

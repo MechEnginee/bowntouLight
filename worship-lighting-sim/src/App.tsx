@@ -527,7 +527,7 @@ export default function App() {
               <br />
               Ctrl+Z=실행취소 · Ctrl+Shift+Z=다시실행 · Esc=선택해제
               <br />
-              1~0=페이더 Flash · B=블랙아웃 · T=탭템포 · Ctrl+`=개발자 통계
+              1~0=페이더 Flash · B=블랙아웃 · T=탭템포 · Space=음원 재생/정지 · Ctrl+`=개발자 통계
               <br />
               <span style={{ color: "#4A90D9" }}>기즈모: {MODE_LABEL[transformMode]}</span>
             </div>

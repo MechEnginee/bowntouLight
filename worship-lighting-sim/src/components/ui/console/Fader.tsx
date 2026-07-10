@@ -9,6 +9,7 @@ interface Props {
   level: number; // 0..1
   onChange: (v: number) => void;
   onDoubleClick?: () => void;
+  /** 고정 픽셀 높이. 생략하면 부모를 100% 채운다(flex 스케일 — 창 크기에 따라 자동 축소/확대) */
   height?: number;
   accent?: string;
   disabled?: boolean;
@@ -19,7 +20,7 @@ interface Props {
 const CAP_H = 26;
 const WIDTH = 30;
 
-export function Fader({ level, onChange, onDoubleClick, height = 150, accent = "#4A90D9", disabled, label }: Props) {
+export function Fader({ level, onChange, onDoubleClick, height, accent = "#4A90D9", disabled, label }: Props) {
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
@@ -45,7 +46,9 @@ export function Fader({ level, onChange, onDoubleClick, height = 150, accent = "
     dragging.current = false;
   };
 
-  const capY = (1 - level) * Math.max(0, height - CAP_H);
+  // 캡 위치를 calc로 계산 → 픽셀 높이를 몰라도 됨(100% 높이에서도 정확). JS 측정 불필요.
+  const capInv = Math.max(0, Math.min(1, 1 - level));
+  const capTop = `calc((100% - ${CAP_H}px) * ${capInv})`;
 
   return (
     <div
@@ -60,8 +63,10 @@ export function Fader({ level, onChange, onDoubleClick, height = 150, accent = "
       data-level={level}
       style={{
         position: "relative",
+        flex: height === undefined ? "1 1 0" : "0 0 auto",
         width: WIDTH,
-        height,
+        height: height === undefined ? "100%" : height,
+        minHeight: 0,
         background: "linear-gradient(90deg, #1c1c20 0%, #2a2a30 50%, #1c1c20 100%)",
         borderRadius: 3,
         border: "1px solid #0c0c0e",
@@ -91,7 +96,7 @@ export function Fader({ level, onChange, onDoubleClick, height = 150, accent = "
         style={{
           position: "absolute",
           left: 1,
-          top: capY,
+          top: capTop,
           width: WIDTH - 2,
           height: CAP_H,
           borderRadius: 3,
