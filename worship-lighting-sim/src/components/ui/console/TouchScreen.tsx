@@ -523,13 +523,28 @@ function PlaybacksWindow() {
         return (
           <button
             key={l.id}
-            onClick={() => useSceneStore.getState().applyLook(l.id)}
+            onClick={() => {
+              const st = useSceneStore.getState();
+              if (slot >= 0) {
+                // 페이더에 올라간 룩: 그 페이더를 발사(풀)/끄기 토글 — 직접 on을 건드리지 않아
+                // 제어패널이 켜지거나 페이더 제어가 막히지 않는다.
+                const cur = st.faderSlots[slot].level;
+                st.setFaderLevel(slot, cur > 0 ? 0 : 1);
+              } else {
+                // 페이더 미할당 룩만 프로그래머로 직접 recall(기존 방식)
+                st.applyLook(l.id);
+              }
+            }}
             onDoubleClick={() => { setEditingId(l.id); setDraft(l.name); }}
             onContextMenu={(e) => {
               e.preventDefault();
               setMenu({ x: e.clientX, y: e.clientY, lookId: l.id });
             }}
-            title={`${Object.keys(l.values).length}개 픽스처 · ${l.fadeMs}ms 페이드`}
+            title={
+              slot >= 0
+                ? `클릭=페이더 ${slot + 1} 발사/끄기 · ${l.fadeMs}ms 페이드`
+                : `클릭=프로그래머로 적용 · ${l.fadeMs}ms 페이드`
+            }
             style={{
               width: 74,
               minHeight: 46,
