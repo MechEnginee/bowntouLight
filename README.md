@@ -1,4 +1,4 @@
-<div align="center">
+<div align="left">
   <img src="./assets/logo.png" alt="BOWNTOU WORSHIP" width="480" />
 </div>
 
@@ -72,7 +72,7 @@ their senses is free to use this source.**
 
 <br />
 
-<div align="center">
+<div align="left">
   <img src="./assets/logo.png" alt="BOWNTOU WORSHIP" width="480" />
 </div>
 
