@@ -21,10 +21,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        # 실제 프로젝트는 이 하위 폴더에 있다
-        working-directory: worship-lighting-sim
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,7 +30,6 @@ jobs:
         with:
           node-version: 20
           cache: yarn
-          cache-dependency-path: worship-lighting-sim/yarn.lock
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
@@ -45,7 +40,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: worship-lighting-sim/dist
+          path: dist
 
   deploy:
     needs: build
