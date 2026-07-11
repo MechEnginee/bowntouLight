@@ -122,15 +122,15 @@ function TransformRow({
   );
 }
 
-export function ControlPanel() {
+export function ControlPanel({ width = 260 }: { width?: number }) {
   const fixtures = useSceneStore((s) => s.fixtures);
   const selectedIds = useSceneStore((s) => s.selectedIds);
   const anchorId = useSceneStore((s) => s.anchorId);
   const update = useSceneStore((s) => s.update);
 
   const panelStyle: React.CSSProperties = {
-    width: 260,
-    flex: "0 0 260px",
+    width,
+    flex: `0 0 ${width}px`,
     height: "100%",
     background: "#1a1a2e",
     color: "#E0E0E0",

@@ -31,7 +31,7 @@ const TYPE_ORDER: FixtureType[] = [
 /** 목록에서 바로 새 오브젝트를 추가할 수 있는 타입 */
 const ADDABLE: FixtureType[] = ["light", "bar", "wall", "floor"];
 
-export function FixtureList() {
+export function FixtureList({ width = 260 }: { width?: number }) {
   const fixtures = useSceneStore((s) => s.fixtures);
   const order = useSceneStore((s) => s.order);
   const selectedIds = useSceneStore((s) => s.selectedIds);
@@ -43,9 +43,13 @@ export function FixtureList() {
   const idsByType = (t: FixtureType) =>
     order.filter((id) => fixtures[id].type === t);
 
+  // 화면에 보이는 순서(타입별 그룹 순서대로 평탄화) — Shift 범위 선택의 기준.
+  // store.order와 다를 수 있으므로 반드시 이 순서로 범위를 계산해야 한다.
+  const visibleOrder = TYPE_ORDER.flatMap((t) => idsByType(t));
+
   const handleClick = (id: string, e: React.MouseEvent) => {
     const s = useSceneStore.getState();
-    if (e.shiftKey) s.rangeSelect(id);
+    if (e.shiftKey) s.rangeSelect(id, visibleOrder);
     else if (e.ctrlKey || e.metaKey) s.toggleSelect(id);
     else s.selectSingle(id);
   };
@@ -65,8 +69,8 @@ export function FixtureList() {
   return (
     <aside
       style={{
-        width: 260,
-        flex: "0 0 260px",
+        width,
+        flex: `0 0 ${width}px`,
         height: "100%",
         background: "#1a1a2e",
         color: "#E0E0E0",
