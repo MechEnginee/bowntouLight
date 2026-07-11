@@ -55,11 +55,14 @@ function ScreenWindow({
   flex,
   children,
   bodyStyle,
+  titleExtra,
 }: {
   title: string;
   flex?: number | string;
   children: React.ReactNode;
   bodyStyle?: React.CSSProperties;
+  /** 타이틀바 오른쪽에 항상 보이는 컨트롤(스크롤과 무관) */
+  titleExtra?: React.ReactNode;
 }) {
   return (
     <div style={{ flex: flex ?? 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
@@ -74,10 +77,12 @@ function ScreenWindow({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 6,
         }}
       >
-        <span>{title}</span>
-        <span style={{ display: "flex", gap: 4, opacity: 0.45, fontSize: 9, fontWeight: 400 }}>
+        <span style={{ flex: "0 0 auto" }}>{title}</span>
+        {titleExtra}
+        <span style={{ display: "flex", gap: 4, opacity: 0.45, fontSize: 9, fontWeight: 400, flex: "0 0 auto" }}>
           <span>⚙</span>
           <span>▣</span>
           <span>✕</span>
@@ -273,9 +278,57 @@ function ColoursWindow() {
     s.update(s.selectedIds, { color: hex });
   };
   const disabled = selectedIds.length === 0;
+  // 색 추가 컨트롤 — 타이틀바에 고정(스크롤로 가려지지 않음). 색 선택은 미리보기만,
+  // [＋추가]를 눌러야 팔레트에 저장된다(선택만으론 추가되지 않음).
+  const addControl = (
+    <span style={{ display: "flex", alignItems: "center", gap: 3, flex: "1 1 auto", justifyContent: "flex-end" }}>
+      <label
+        title="색 선택 (미리보기)"
+        style={{
+          width: 20,
+          height: 16,
+          borderRadius: 3,
+          border: "1px solid rgba(255,255,255,0.35)",
+          background: draft,
+          cursor: "pointer",
+          position: "relative",
+          flex: "0 0 auto",
+          overflow: "hidden", // 네이티브 color input의 넘치는 히트영역을 잘라 인접 버튼을 가리지 않게
+        }}
+      >
+        <input
+          type="color"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)} // 미리보기만 — 추가 안 함
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }}
+        />
+      </label>
+      <button
+        onClick={() => {
+          useSceneStore.getState().addCustomColor(draft);
+          apply(draft); // 선택된 픽스처가 있으면 함께 적용
+        }}
+        title="선택한 색을 팔레트에 추가"
+        style={{
+          border: "1px solid #4a6a9c",
+          background: "#22314f",
+          color: "#dce8f8",
+          borderRadius: 3,
+          fontSize: 9,
+          fontWeight: 700,
+          padding: "1px 6px",
+          cursor: "pointer",
+          flex: "0 0 auto",
+        }}
+      >
+        ＋추가
+      </button>
+    </span>
+  );
   return (
     <ScreenWindow
       title="Colours"
+      titleExtra={addControl}
       bodyStyle={{ display: "flex", flexWrap: "wrap", alignContent: "flex-start", gap: 3 }}
     >
       {COLOUR_PALETTE.map((c) => (
@@ -291,37 +344,6 @@ function ColoursWindow() {
           onDelete={() => useSceneStore.getState().removeCustomColor(hex)}
         />
       ))}
-      {/* 색 추가 — 네이티브 색 선택기. 고른 색을 팔레트에 저장하고 선택 픽스처에 바로 적용 */}
-      <label
-        title="색 추가 (원하는 색 선택)"
-        style={{
-          width: 34,
-          height: 30,
-          borderRadius: 3,
-          border: "1px dashed #4a6a9c",
-          background: "transparent",
-          color: "#9ab8e0",
-          fontSize: 16,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          position: "relative",
-        }}
-      >
-        +
-        <input
-          type="color"
-          value={draft}
-          onChange={(e) => {
-            const hex = e.target.value;
-            setDraft(hex);
-            useSceneStore.getState().addCustomColor(hex);
-            apply(hex);
-          }}
-          style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
-        />
-      </label>
     </ScreenWindow>
   );
 }
