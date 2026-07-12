@@ -112,6 +112,7 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState({ fps: 0, tris: 0 });
   const [showHelp, setShowHelp] = useState(false); // 좌하단 단축키 도움말 토글
+  const [maximized, setMaximized] = useState(false); // 3D 뷰 전체화면(패널 숨김)
 
   // 패널 크기 (좌/우 목록·제어패널 폭, 하단 콘솔 높이) — 경계를 드래그해 조절
   const [leftWidth, setLeftWidth] = useState(260);
@@ -396,11 +397,15 @@ export default function App() {
     >
       {/* 상단 3단: 픽스처 목록 | 3D 뷰 | 제어 패널 (콘솔 패널이 아래를 차지하는 만큼 줄어듦) */}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <FixtureList width={leftWidth} />
-      <ResizeHandle
-        orientation="vertical"
-        onDelta={(d) => setLeftWidth((w) => clamp(w + d, 180, 520))}
-      />
+      {!maximized && (
+        <>
+          <FixtureList width={leftWidth} />
+          <ResizeHandle
+            orientation="vertical"
+            onDelta={(d) => setLeftWidth((w) => clamp(w + d, 180, 520))}
+          />
+        </>
+      )}
 
       <div
         style={{ flex: 1, position: "relative", minWidth: 0 }}
@@ -452,7 +457,7 @@ export default function App() {
           </GizmoHelper>
         </Canvas>
 
-        {/* 우상단: 실행취소 / 다시실행 (태블릿·아이패드용 터치 버튼) */}
+        {/* 우상단: 실행취소 / 다시실행 + 3D 뷰 최대화/최소화 (태블릿·아이패드용 터치 버튼) */}
         <div
           style={{
             position: "absolute",
@@ -493,6 +498,31 @@ export default function App() {
               {b.icon}
             </button>
           ))}
+          {/* 3D 뷰 최대화/최소화 토글 */}
+          <button
+            onClick={() => setMaximized((v) => !v)}
+            title={maximized ? "3D 뷰 최소화 (원래 창 크기로)" : "3D 뷰 최대화 (전체 화면)"}
+            aria-label="3D 뷰 최대화/최소화"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 8,
+              background: maximized ? "#4A90D9" : "#3a3a45",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.25)",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+              fontSize: 18,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1,
+              touchAction: "manipulation",
+            }}
+          >
+            {maximized ? "🗗" : "🗖"}
+          </button>
         </div>
 
         {/* 개발자 통계 (Ctrl+` 토글) — 우상단 (undo/redo 버튼 아래로) */}
@@ -606,23 +636,31 @@ export default function App() {
         </div>
       </div>
 
-      <ResizeHandle
-        orientation="vertical"
-        onDelta={(d) => setRightWidth((w) => clamp(w - d, 200, 520))}
-      />
-      <ControlPanel width={rightWidth} />
+      {!maximized && (
+        <>
+          <ResizeHandle
+            orientation="vertical"
+            onDelta={(d) => setRightWidth((w) => clamp(w - d, 200, 520))}
+          />
+          <ControlPanel width={rightWidth} />
+        </>
+      )}
       </div>
 
-      {/* 3D 뷰와 콘솔 사이: 음원 타임라인(연습용) — 상단 가장자리 드래그로 높이 조절 */}
-      <AudioTimeline
-        height={audioHeight}
-        onHeightChange={(h) => setAudioHeight(clamp(h, 60, 420))}
-      />
+      {!maximized && (
+        <>
+          {/* 3D 뷰와 콘솔 사이: 음원 타임라인(연습용) — 상단 가장자리 드래그로 높이 조절 */}
+          <AudioTimeline
+            height={audioHeight}
+            onHeightChange={(h) => setAudioHeight(clamp(h, 60, 420))}
+          />
 
-      <ConsolePanel
-        height={consoleHeight}
-        onHeightChange={(h) => setConsoleHeight(clamp(h, 120, 640))}
-      />
+          <ConsolePanel
+            height={consoleHeight}
+            onHeightChange={(h) => setConsoleHeight(clamp(h, 120, 640))}
+          />
+        </>
+      )}
     </div>
   );
 }
