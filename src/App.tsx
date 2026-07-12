@@ -46,22 +46,6 @@ const MODE_LABEL = {
   scale: "크기",
 } as const;
 
-const viewBtnStyle: React.CSSProperties = {
-  width: 30,
-  height: 30,
-  borderRadius: 6,
-  background: "#3a3a45",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,0.25)",
-  boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
-  fontSize: 15,
-  lineHeight: 1,
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
 /** 씬 환경광 — 스토어 sceneBrightness/lightPosition에 연동. Canvas 내부에서 구독해야 리렌더된다. */
 function SceneLights() {
   const b = useSceneStore((s) => s.sceneBrightness);
@@ -123,7 +107,6 @@ export default function App() {
   const redo = useSceneStore((s) => s.redo);
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
-  const controlsRef = useRef<{ reset: () => void } | null>(null); // OrbitControls (카메라 되돌리기)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [showStats, setShowStats] = useState(false);
@@ -458,7 +441,6 @@ export default function App() {
           />
 
           <OrbitControls
-            ref={controlsRef as never}
             makeDefault
             target={[0, 2.5, 0]}
             enableZoom
@@ -475,27 +457,7 @@ export default function App() {
           </GizmoHelper>
         </Canvas>
 
-        {/* 좌상단: 3D 뷰 컨트롤 — 최대화/최소화 · 카메라 되돌리기 */}
-        <div style={{ position: "absolute", top: 12, left: 12, display: "flex", gap: 6, zIndex: 6 }}>
-          <button
-            onClick={() => setMaximized((v) => !v)}
-            title={maximized ? "3D 뷰 최소화 (패널 복원)" : "3D 뷰 최대화 (전체 뷰)"}
-            aria-label="3D 뷰 최대화/최소화"
-            style={viewBtnStyle}
-          >
-            {maximized ? "🗗" : "🗖"}
-          </button>
-          <button
-            onClick={() => controlsRef.current?.reset()}
-            title="카메라 시점 되돌리기 (기본 위치)"
-            aria-label="카메라 되돌리기"
-            style={viewBtnStyle}
-          >
-            ↺
-          </button>
-        </div>
-
-        {/* 우상단: 실행취소 / 다시실행 (태블릿·아이패드용 터치 버튼) */}
+        {/* 우상단: 실행취소 / 다시실행 + 3D 뷰 최대화/최소화 (태블릿·아이패드용 터치 버튼) */}
         <div
           style={{
             position: "absolute",
@@ -536,6 +498,31 @@ export default function App() {
               {b.icon}
             </button>
           ))}
+          {/* 3D 뷰 최대화/최소화 토글 */}
+          <button
+            onClick={() => setMaximized((v) => !v)}
+            title={maximized ? "3D 뷰 최소화 (원래 창 크기로)" : "3D 뷰 최대화 (전체 화면)"}
+            aria-label="3D 뷰 최대화/최소화"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 8,
+              background: maximized ? "#4A90D9" : "#3a3a45",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.25)",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+              fontSize: 18,
+              fontWeight: 700,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1,
+              touchAction: "manipulation",
+            }}
+          >
+            {maximized ? "🗗" : "🗖"}
+          </button>
         </div>
 
         {/* 개발자 통계 (Ctrl+` 토글) — 우상단 (undo/redo 버튼 아래로) */}
