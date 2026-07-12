@@ -26,7 +26,7 @@ import {
 } from "./console-types";
 import { startFade } from "./fade-engine";
 import { syncEffectEngine } from "./effect-engine";
-import { useAudioStore, type AudioMarker } from "./audio-store";
+import { useAudioStore, type AudioMarker, type RecordingBaseline } from "./audio-store";
 
 export type TransformMode = "translate" | "rotate" | "scale";
 export type Vec3 = [number, number, number];
@@ -91,11 +91,15 @@ export interface SceneFile {
     /** 사용자가 Colours 창에 추가한 커스텀 색(#rrggbb) */
     customColors?: string[];
   };
-  /** v2+: 음원 타임라인 — 파일명+길이+메모 마커 저장(오디오 원본은 재로드). */
+  /** v2+: 음원 타임라인 — 파일명+길이+메모 마커 + 조명 녹화 저장(오디오 원본은 재로드). */
   audio?: {
     fileName: string | null;
     duration?: number; // 초 — 재링크 시 동일 음원 판정용
     markers: Array<{ id: string; time: number; text: string; color?: string }>;
+    /** 조명 녹화 이벤트 (음원 시간축) */
+    events?: Array<{ id: string; t: number; kind: string; slot?: number; level?: number; held?: boolean; on?: boolean }>;
+    /** 녹화 기준상태 */
+    baseline?: { faderLevels: number[]; grandMaster: number; blackout: boolean } | null;
   };
 }
 
@@ -242,6 +246,10 @@ interface SceneState {
   setFlashHeld: (slotIndex: number, held: boolean) => void;
   setGrandMaster: (level: number) => void;
   toggleBlackout: () => void;
+  /** 블랙아웃을 특정 값으로 설정 (조명 녹화 재생 시 사용) */
+  setBlackout: (on: boolean) => void;
+  /** 조명 녹화 기준상태로 콘솔 라이브 상태를 리셋 (재생/탐색 재구성용) */
+  applyRecordingBaseline: (b: RecordingBaseline) => void;
 
   // ─── 콘솔: 셰이프/이펙트 ───
   /** 그룹을 대상으로 이펙트 생성(기본 실행 상태). 그룹이 비면 no-op */
@@ -779,6 +787,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           fileName: a.fileName,
           duration: a.loaded ? a.duration : a.savedDuration,
           markers: a.markers.map((m) => ({ ...m })),
+          events: a.events.map((e) => ({ ...e })),
+          baseline: a.baseline,
         };
       })(),
     };
@@ -892,6 +902,35 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       const audioDur =
         typeof rawAudio?.duration === "number" && Number.isFinite(rawAudio.duration) ? rawAudio.duration : 0;
       useAudioStore.getState().restoreFromScene(fileName, audioDur, markers);
+
+      // 조명 녹화 이벤트/기준상태 복원 (방어적 파싱)
+      const VALID_KINDS = ["fader", "flash", "blackout", "grand"];
+      const events = Array.isArray(rawAudio?.events)
+        ? rawAudio.events
+            .filter(
+              (e) =>
+                !!e && typeof e.t === "number" && Number.isFinite(e.t) && typeof e.kind === "string" && VALID_KINDS.includes(e.kind),
+            )
+            .map((e) => ({
+              id: typeof e.id === "string" ? e.id : genId(),
+              t: e.t,
+              kind: e.kind as "fader" | "flash" | "blackout" | "grand",
+              slot: typeof e.slot === "number" ? e.slot : undefined,
+              level: typeof e.level === "number" ? e.level : undefined,
+              held: typeof e.held === "boolean" ? e.held : undefined,
+              on: typeof e.on === "boolean" ? e.on : undefined,
+            }))
+        : [];
+      const rawBase = rawAudio?.baseline;
+      const baseline =
+        rawBase && Array.isArray(rawBase.faderLevels) && typeof rawBase.grandMaster === "number"
+          ? {
+              faderLevels: rawBase.faderLevels.map((n) => (typeof n === "number" ? clamp01(n) : 0)),
+              grandMaster: clamp01(rawBase.grandMaster),
+              blackout: rawBase.blackout === true,
+            }
+          : null;
+      useAudioStore.getState().setRecording(events, baseline);
     }
     return { ok: true };
   },
@@ -1349,6 +1388,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       return { faderSlots, groups }; // 라이브 조작 — undo 미기록
     });
     if (wasEffect) syncEffectEngine(); // 이펙트 페이더 레벨 변화 → 엔진 시작/정지
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "fader", slot: slotIndex, level: clamp01(level) });
   },
 
   setFlashHeld: (slotIndex, held) => {
@@ -1372,11 +1413,32 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       return { faderSlots }; // 라이브 조작 — undo 미기록
     });
     if (isEffect) syncEffectEngine(); // 이펙트 슬롯 Flash → 엔진 시작/정지
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "flash", slot: slotIndex, held });
   },
 
-  setGrandMaster: (level) => set({ grandMaster: clamp01(level) }),
+  setGrandMaster: (level) => {
+    set({ grandMaster: clamp01(level) });
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "grand", level: clamp01(level) });
+  },
 
-  toggleBlackout: () => set((s) => ({ blackout: !s.blackout })),
+  toggleBlackout: () => {
+    set((s) => ({ blackout: !s.blackout }));
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "blackout", on: get().blackout });
+  },
+
+  setBlackout: (on) => set({ blackout: on }),
+
+  applyRecordingBaseline: (b) => {
+    set((s) => ({
+      faderSlots: s.faderSlots.map((sl, i) => ({ ...sl, level: b.faderLevels[i] ?? 0, flashHeld: false })),
+      grandMaster: b.grandMaster,
+      blackout: b.blackout,
+    }));
+    syncEffectEngine(); // 이펙트 페이더가 기준값에 있으면 엔진 재동기
+  },
 
   // ─── 셰이프/이펙트 ───
   createEffect: (groupId, shape) => {

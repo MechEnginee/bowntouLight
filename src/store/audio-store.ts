@@ -5,12 +5,33 @@
 //   여기에는 자주 안 바뀌는 상태(파일/파형/마커/재생여부/접힘)만 둔다.
 
 import { create } from "zustand";
+import { getAudioTime } from "../components/ui/audio/audio-player";
 
 export interface AudioMarker {
   id: string;
   time: number; // 초
   text: string;
   color?: string;
+}
+
+// ─── 조명 녹화 이벤트 (음원 시간축에 기록되는 라이브 조작) ───
+// v1 대상: 페이더 레벨 / Flash / 블랙아웃 / 그랜드마스터
+export type LightingEventKind = "fader" | "flash" | "blackout" | "grand";
+export interface LightingEvent {
+  id: string;
+  t: number; // 초 (음원 시간)
+  kind: LightingEventKind;
+  slot?: number; // fader / flash
+  level?: number; // fader / grand
+  held?: boolean; // flash
+  on?: boolean; // blackout
+}
+
+/** 녹화 시작 시점의 콘솔 라이브 상태 — 재생/탐색 시 여기서부터 이벤트를 재적용 */
+export interface RecordingBaseline {
+  faderLevels: number[]; // 길이 10
+  grandMaster: number;
+  blackout: boolean;
 }
 
 function mid(): string {
@@ -32,6 +53,21 @@ interface AudioState {
   savedDuration: number;
   /** 씬 복원 후 원본 음원을 다시 찾아야 하는 상태 → "파일 찾기" 팝업 표시 */
   awaitingRelink: boolean;
+
+  // ─── 조명 녹화 ───
+  recording: boolean;
+  events: LightingEvent[];
+  baseline: RecordingBaseline | null;
+
+  /** 녹화 시작 — 기준 상태 스냅샷 + 기존 이벤트 폐기 */
+  startRecording: (baseline: RecordingBaseline) => void;
+  stopRecording: () => void;
+  /** 라이브 조작 캡처 (녹화 중일 때만 · 현재 음원 시간으로 타임스탬프) */
+  recordEvent: (ev: Omit<LightingEvent, "id" | "t">) => void;
+  removeEvent: (id: string) => void;
+  clearEvents: () => void;
+  /** .btw 불러오기용 — 이벤트/기준상태 복원 */
+  setRecording: (events: LightingEvent[], baseline: RecordingBaseline | null) => void;
 
   setAnalyzing: (b: boolean) => void;
   setError: (msg: string | null) => void;
@@ -65,6 +101,21 @@ export const useAudioStore = create<AudioState>()((set) => ({
   markers: [],
   savedDuration: 0,
   awaitingRelink: false,
+  recording: false,
+  events: [],
+  baseline: null,
+
+  startRecording: (baseline) => set({ recording: true, events: [], baseline }),
+  stopRecording: () => set({ recording: false }),
+  recordEvent: (ev) =>
+    set((s) => {
+      if (!s.recording) return {};
+      return { events: [...s.events, { ...ev, id: mid(), t: getAudioTime() }] };
+    }),
+  removeEvent: (id) => set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
+  clearEvents: () => set({ events: [], baseline: null, recording: false }),
+  setRecording: (events, baseline) =>
+    set({ events: [...events].sort((a, b) => a.t - b.t), baseline, recording: false }),
 
   setAnalyzing: (b) => set({ analyzing: b, error: b ? null : undefined }),
   setError: (msg) => set({ error: msg, analyzing: false }),
@@ -107,6 +158,9 @@ export const useAudioStore = create<AudioState>()((set) => ({
       markers: [],
       savedDuration: 0,
       awaitingRelink: false,
+      recording: false,
+      events: [],
+      baseline: null,
     }),
 
   addMarker: (time, text) =>
