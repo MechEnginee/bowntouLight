@@ -117,6 +117,10 @@ function StatsProbe({ onSample }: { onSample: (fps: number, tris: number) => voi
 
 export default function App() {
   const transformMode = useSceneStore((s) => s.transformMode);
+  const canUndo = useSceneStore((s) => s.past.length > 0);
+  const canRedo = useSceneStore((s) => s.future.length > 0);
+  const undo = useSceneStore((s) => s.undo);
+  const redo = useSceneStore((s) => s.redo);
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
   const controlsRef = useRef<{ reset: () => void } | null>(null); // OrbitControls (카메라 되돌리기)
@@ -491,12 +495,55 @@ export default function App() {
           </button>
         </div>
 
-        {/* 개발자 통계 (Ctrl+` 토글) — 우상단 */}
+        {/* 우상단: 실행취소 / 다시실행 (태블릿·아이패드용 터치 버튼) */}
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            display: "flex",
+            gap: 8,
+          }}
+        >
+          {([
+            { label: "실행취소", icon: "↶", onClick: undo, enabled: canUndo },
+            { label: "다시실행", icon: "↷", onClick: redo, enabled: canRedo },
+          ] as const).map((b) => (
+            <button
+              key={b.label}
+              onClick={b.onClick}
+              disabled={!b.enabled}
+              title={b.label}
+              aria-label={b.label}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 8,
+                background: b.enabled ? "#3a3a45" : "#26262c",
+                color: b.enabled ? "#fff" : "#666",
+                border: "1px solid rgba(255,255,255,0.25)",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+                fontSize: 20,
+                fontWeight: 700,
+                cursor: b.enabled ? "pointer" : "default",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 1,
+                touchAction: "manipulation",
+              }}
+            >
+              {b.icon}
+            </button>
+          ))}
+        </div>
+
+        {/* 개발자 통계 (Ctrl+` 토글) — 우상단 (undo/redo 버튼 아래로) */}
         {showStats && (
           <div
             style={{
               position: "absolute",
-              top: 12,
+              top: 60,
               right: 12,
               color: "#7bff9b",
               font: "12px/1.5 monospace",
