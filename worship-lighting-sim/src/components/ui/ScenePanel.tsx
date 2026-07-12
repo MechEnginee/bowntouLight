@@ -29,7 +29,7 @@ export function ScenePanel() {
   const backgroundColor = useSceneStore((s) => s.backgroundColor);
   const setBackgroundChannel = useSceneStore((s) => s.setBackgroundChannel);
 
-  const [pos, setPos] = useState({ x: 12, y: 12 });
+  const [pos, setPos] = useState({ x: 12, y: 52 }); // 좌상단 3D 뷰 컨트롤 버튼 아래로
   const [collapsed, setCollapsed] = useState(false);
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

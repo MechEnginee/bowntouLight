@@ -46,6 +46,22 @@ const MODE_LABEL = {
   scale: "크기",
 } as const;
 
+const viewBtnStyle: React.CSSProperties = {
+  width: 30,
+  height: 30,
+  borderRadius: 6,
+  background: "#3a3a45",
+  color: "#fff",
+  border: "1px solid rgba(255,255,255,0.25)",
+  boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+  fontSize: 15,
+  lineHeight: 1,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
 /** 씬 환경광 — 스토어 sceneBrightness/lightPosition에 연동. Canvas 내부에서 구독해야 리렌더된다. */
 function SceneLights() {
   const b = useSceneStore((s) => s.sceneBrightness);
@@ -103,11 +119,13 @@ export default function App() {
   const transformMode = useSceneStore((s) => s.transformMode);
   const r3f = useRef<RootState | null>(null);
   const tcRef = useRef<THREE.Object3D | null>(null); // TransformControls 인스턴스(.axis로 기즈모 잡는중 판정)
+  const controlsRef = useRef<{ reset: () => void } | null>(null); // OrbitControls (카메라 되돌리기)
   const marqueeRef = useRef<(Rect & { additive: boolean }) | null>(null);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState({ fps: 0, tris: 0 });
   const [showHelp, setShowHelp] = useState(false); // 좌하단 단축키 도움말 토글
+  const [maximized, setMaximized] = useState(false); // 3D 뷰 전체화면(패널 숨김)
 
   // 패널 크기 (좌/우 목록·제어패널 폭, 하단 콘솔 높이) — 경계를 드래그해 조절
   const [leftWidth, setLeftWidth] = useState(260);
@@ -392,11 +410,15 @@ export default function App() {
     >
       {/* 상단 3단: 픽스처 목록 | 3D 뷰 | 제어 패널 (콘솔 패널이 아래를 차지하는 만큼 줄어듦) */}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-      <FixtureList width={leftWidth} />
-      <ResizeHandle
-        orientation="vertical"
-        onDelta={(d) => setLeftWidth((w) => clamp(w + d, 180, 520))}
-      />
+      {!maximized && (
+        <>
+          <FixtureList width={leftWidth} />
+          <ResizeHandle
+            orientation="vertical"
+            onDelta={(d) => setLeftWidth((w) => clamp(w + d, 180, 520))}
+          />
+        </>
+      )}
 
       <div
         style={{ flex: 1, position: "relative", minWidth: 0 }}
@@ -432,6 +454,7 @@ export default function App() {
           />
 
           <OrbitControls
+            ref={controlsRef as never}
             makeDefault
             target={[0, 2.5, 0]}
             enableZoom
@@ -447,6 +470,26 @@ export default function App() {
             <GizmoViewport axisColors={["#ff4d4d", "#4dff88", "#4d88ff"]} labelColor="white" />
           </GizmoHelper>
         </Canvas>
+
+        {/* 좌상단: 3D 뷰 컨트롤 — 최대화/최소화 · 카메라 되돌리기 */}
+        <div style={{ position: "absolute", top: 12, left: 12, display: "flex", gap: 6, zIndex: 6 }}>
+          <button
+            onClick={() => setMaximized((v) => !v)}
+            title={maximized ? "3D 뷰 최소화 (패널 복원)" : "3D 뷰 최대화 (전체 뷰)"}
+            aria-label="3D 뷰 최대화/최소화"
+            style={viewBtnStyle}
+          >
+            {maximized ? "🗗" : "🗖"}
+          </button>
+          <button
+            onClick={() => controlsRef.current?.reset()}
+            title="카메라 시점 되돌리기 (기본 위치)"
+            aria-label="카메라 되돌리기"
+            style={viewBtnStyle}
+          >
+            ↺
+          </button>
+        </div>
 
         {/* 개발자 통계 (Ctrl+` 토글) — 우상단 */}
         {showStats && (
@@ -559,23 +602,31 @@ export default function App() {
         </div>
       </div>
 
-      <ResizeHandle
-        orientation="vertical"
-        onDelta={(d) => setRightWidth((w) => clamp(w - d, 200, 520))}
-      />
-      <ControlPanel width={rightWidth} />
+      {!maximized && (
+        <>
+          <ResizeHandle
+            orientation="vertical"
+            onDelta={(d) => setRightWidth((w) => clamp(w - d, 200, 520))}
+          />
+          <ControlPanel width={rightWidth} />
+        </>
+      )}
       </div>
 
-      {/* 3D 뷰와 콘솔 사이: 음원 타임라인(연습용) — 상단 가장자리 드래그로 높이 조절 */}
-      <AudioTimeline
-        height={audioHeight}
-        onHeightChange={(h) => setAudioHeight(clamp(h, 60, 420))}
-      />
+      {!maximized && (
+        <>
+          {/* 3D 뷰와 콘솔 사이: 음원 타임라인(연습용) — 상단 가장자리 드래그로 높이 조절 */}
+          <AudioTimeline
+            height={audioHeight}
+            onHeightChange={(h) => setAudioHeight(clamp(h, 60, 420))}
+          />
 
-      <ConsolePanel
-        height={consoleHeight}
-        onHeightChange={(h) => setConsoleHeight(clamp(h, 120, 640))}
-      />
+          <ConsolePanel
+            height={consoleHeight}
+            onHeightChange={(h) => setConsoleHeight(clamp(h, 120, 640))}
+          />
+        </>
+      )}
     </div>
   );
 }
