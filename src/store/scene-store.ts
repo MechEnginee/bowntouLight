@@ -24,9 +24,12 @@ import {
   type EffectSnapshot,
   type ShapeType,
   type LiveOffset,
+  type LookMask,
+  type ShapeOnFader,
+  FULL_MASK,
 } from "./console-types";
 import { startFade } from "./fade-engine";
-import { syncEffectEngine, effectIntensity } from "./effect-engine";
+import { syncEffectEngine } from "./effect-engine";
 import { useAudioStore, type AudioMarker, type RecordingBaseline } from "./audio-store";
 
 export type TransformMode = "translate" | "rotate" | "scale";
@@ -85,6 +88,8 @@ export interface SceneFile {
       values: Record<string, LookValues>;
       /** v3+: 큐에 기록된 셰이프 스냅샷 */
       effects?: EffectSnapshot[];
+      /** 페이더 셰이프 제어 모드 (부재 = "size") */
+      shapeOnFader?: ShapeOnFader;
     }>;
     faderSlots: Array<{ assignment: FaderAssignment | null; level: number }>;
     /** 이펙트 속도 동기 BPM */
@@ -236,12 +241,15 @@ interface SceneState {
   setGroupMaster: (id: string, level: number) => void;
 
   // ─── 콘솔: 룩 ───
-  saveLook: (name?: string) => void;
+  /** 룩 저장. mask 미지정 = 전체 저장(현행). Set Mask 대응 */
+  saveLook: (name?: string, mask?: LookMask) => void;
   applyLook: (id: string) => void;
   updateLook: (id: string) => void;
   renameLook: (id: string, name: string) => void;
   deleteLook: (id: string) => void;
   setLookFade: (id: string, ms: number) => void;
+  /** 룩의 페이더 셰이프 제어 모드 설정 (Speed on Fader 등) */
+  setLookShapeOnFader: (id: string, v: ShapeOnFader) => void;
 
   // ─── 콘솔: 페이더 ───
   assignFader: (slotIndex: number, assignment: FaderAssignment | null) => void;
@@ -258,6 +266,8 @@ interface SceneState {
   /** 지정한 픽스처를 대상으로 이펙트 생성(기본 실행 상태). 대상이 비면 no-op */
   createEffect: (shape: ShapeType, fixtureIds: string[], name?: string) => void;
   updateEffect: (id: string, patch: Partial<EffectDef>) => void;
+  /** 셰이프 전용 큐의 페이더 제어 모드 설정 */
+  setEffectShapeOnFader: (id: string, v: ShapeOnFader) => void;
   removeEffect: (id: string) => void;
   toggleEffect: (id: string) => void;
   /** 모든 이펙트 정지·제거 후 원위치 복귀 */
@@ -354,27 +364,47 @@ function nextLabel(prefix: string, existingNames: string[]): string {
 function snapshotLookValues(
   fixtures: Record<string, FixtureRuntime>,
   ids: string[],
+  mask: LookMask = FULL_MASK,
 ): Record<string, LookValues> {
   const values: Record<string, LookValues> = {};
   for (const id of ids) {
     const f = fixtures[id];
     if (!f) continue;
-    const lv: LookValues = { dimmer: f.dimmer, on: f.on };
+    const lv: LookValues = {};
+    if (mask.intensity) {
+      lv.dimmer = f.dimmer;
+      lv.on = f.on;
+    }
     if (
-      f.type === "movingHead" ||
-      f.type === "par" ||
-      f.type === "strobe" ||
-      f.type === "light"
+      mask.colour &&
+      (f.type === "movingHead" ||
+        f.type === "par" ||
+        f.type === "strobe" ||
+        f.type === "light")
     ) {
       lv.color = f.color;
     }
-    if (f.type === "movingHead" || f.type === "par") {
+    if (mask.position && (f.type === "movingHead" || f.type === "par")) {
       lv.pan = f.pan;
       lv.tilt = f.tilt;
     }
-    values[id] = lv;
+    // 마스크 적용 결과 빈 객체면 제외 (빈 룩 방지)
+    if (Object.keys(lv).length > 0) values[id] = lv;
   }
   return values;
+}
+
+/** 룩 내용에서 포함된 계열을 파생 — UI 칩 표시와 updateLook 마스크 보존에 사용 */
+export function lookBanks(look: LookDef): LookMask {
+  let intensity = false,
+    position = false,
+    colour = false;
+  for (const lv of Object.values(look.values)) {
+    if (lv.dimmer !== undefined || lv.on !== undefined) intensity = true;
+    if (lv.pan !== undefined || lv.tilt !== undefined) position = true;
+    if (lv.color !== undefined) colour = true;
+  }
+  return { intensity, position, colour, shapes: !!look.effects?.length };
 }
 
 function defaultFaderSlots(): FaderSlot[] {
@@ -466,7 +496,9 @@ function captureEffects(s: SceneState): { snapshots: EffectSnapshot[]; sourceIds
   const snapshots: EffectSnapshot[] = [];
   const sourceIds: string[] = [];
   for (const e of s.effects) {
-    if (effectIntensity(s, e.id, e.running) <= 0) continue; // 활성만
+    // N-1: 페이더에 올라간 셰이프 전용 큐(발동된 것)는 룩에 복제하지 않는다
+    if (s.faderSlots.some((sl) => sl.assignment?.kind === "effect" && sl.assignment.effectId === e.id)) continue;
+    if (!e.running) continue; // 프리뷰 실행 중인 것만 (슬롯 경로 제외 후엔 running만 보면 됨)
     const overlap = e.fixtureIds.filter((fid) => sel.has(fid));
     if (overlap.length === 0) continue; // 선택과 교집합 없으면 제외
     snapshots.push({
@@ -633,6 +665,7 @@ function coerceLooks(
           : DEFAULT_LOOK_FADE_MS,
       values,
       effects: coerceEffectSnapshots(o.effects, fixtures),
+      shapeOnFader: coerceShapeOnFader(o.shapeOnFader),
     });
   }
   return out;
@@ -679,6 +712,13 @@ function coerceFaderSlots(
 }
 
 const VALID_SHAPES: ShapeType[] = ["circle", "figure8", "pan", "tilt", "dimmerWave"];
+const VALID_SHAPE_ON_FADER: ShapeOnFader[] = ["size", "speed", "both", "none"];
+/** o.shapeOnFader가 유효한 4값 중 하나면 채택, 아니면 undefined("size"로 동작) */
+function coerceShapeOnFader(v: unknown): ShapeOnFader | undefined {
+  return typeof v === "string" && (VALID_SHAPE_ON_FADER as string[]).includes(v)
+    ? (v as ShapeOnFader)
+    : undefined;
+}
 
 // standalone 이펙트 코어싱 + v2(groupId)→v3(fixtureIds) 마이그레이션.
 function coerceEffects(
@@ -715,6 +755,7 @@ function coerceEffects(
       direction: o.direction === -1 ? -1 : 1,
       step: o.step === true,
       running: o.running !== false,
+      shapeOnFader: coerceShapeOnFader(o.shapeOnFader),
     });
   }
   return out;
@@ -845,6 +886,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           fadeMs: l.fadeMs,
           values: { ...l.values },
           effects: l.effects?.map((sn) => ({ ...sn, fixtureIds: [...sn.fixtureIds] })),
+          shapeOnFader: l.shapeOnFader,
         })),
         faderSlots: s.faderSlots.map((sl) => ({
           assignment: sl.assignment,
@@ -1344,19 +1386,22 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     }),
 
   // ─── 콘솔: 룩 ───
-  saveLook: (name) => {
+  saveLook: (name, mask = FULL_MASK) => {
     set((s) => {
       if (s.selectedIds.length === 0) return {};
+      // 마스크 적용 스냅샷 (기능 A). shapes 계열이 꺼지면 셰이프 캡처·프리뷰 정지 생략.
+      const values = snapshotLookValues(s.fixtures, s.selectedIds, mask);
+      const cap = mask.shapes ? captureEffects(s) : { snapshots: [], sourceIds: [] };
+      // 전 계열 off 등으로 담을 게 아무것도 없으면 no-op (빈 룩 방지)
+      if (Object.keys(values).length === 0 && cap.snapshots.length === 0) return {};
       const hist = record(s, null);
       const id = genId();
-      // 활성 셰이프를 큐(룩)에 스냅샷 (§5-1)
-      const { snapshots, sourceIds } = captureEffects(s);
       const look: LookDef = {
         id,
         name: name?.trim() || nextLabel("룩", s.looks.map((l) => l.name)),
-        values: snapshotLookValues(s.fixtures, s.selectedIds),
+        values,
         fadeMs: DEFAULT_LOOK_FADE_MS,
-        effects: snapshots.length ? snapshots : undefined,
+        effects: cap.snapshots.length ? cap.snapshots : undefined,
       };
       // D-9: 빈 슬롯이 있으면 자동 할당
       const emptyIdx = s.faderSlots.findIndex((sl) => sl.assignment === null);
@@ -1369,7 +1414,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
             )
           : s.faderSlots;
       // D-2: 캡처된 프리뷰 이펙트 정지(running=false). 슬롯에 올라간 건 슬롯이 강도를 유지.
-      const stop = new Set(sourceIds);
+      const stop = new Set(cap.sourceIds);
       const effects = stop.size
         ? s.effects.map((e) => (stop.has(e.id) ? { ...e, running: false } : e))
         : s.effects;
@@ -1390,31 +1435,35 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     }),
 
   updateLook: (id) => {
-    let changed = false;
+    const pre = get();
+    const look = pre.looks.find((l) => l.id === id);
+    if (!look || pre.selectedIds.length === 0) return;
+    // 기존 룩의 계열을 파생해 마스크로 보존 — 위치 전용 룩 갱신 시 색이 끼지 않음 (§3-3)
+    const mask = lookBanks(look);
+    const values = snapshotLookValues(pre.fixtures, pre.selectedIds, mask);
+    const cap = mask.shapes ? captureEffects(pre) : { snapshots: [], sourceIds: [] };
+    // D-4: 셰이프가 있던 큐인데 재캡처 결과가 비면 확인
+    if (mask.shapes && (look.effects?.length ?? 0) > 0 && cap.snapshots.length === 0) {
+      if (typeof window !== "undefined" && !window.confirm("이 큐의 셰이프가 제거됩니다. 계속할까요?")) return;
+    }
     set((s) => {
-      if (!s.looks.some((l) => l.id === id) || s.selectedIds.length === 0) return {};
+      if (!s.looks.some((l) => l.id === id)) return {};
       const hist = record(s, null);
-      const { snapshots, sourceIds } = captureEffects(s); // §5-2 재스냅샷
-      const stop = new Set(sourceIds);
+      const stop = new Set(cap.sourceIds);
       const effects = stop.size
         ? s.effects.map((e) => (stop.has(e.id) ? { ...e, running: false } : e))
         : s.effects;
-      changed = true;
       return {
         ...hist,
         looks: s.looks.map((l) =>
           l.id === id
-            ? {
-                ...l,
-                values: snapshotLookValues(s.fixtures, s.selectedIds),
-                effects: snapshots.length ? snapshots : undefined,
-              }
+            ? { ...l, values, effects: cap.snapshots.length ? cap.snapshots : undefined }
             : l,
         ),
         effects,
       };
     });
-    if (changed) syncEffectEngine();
+    syncEffectEngine();
   },
 
   renameLook: (id, name) =>
@@ -1448,6 +1497,18 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         looks: s.looks.map((l) => (l.id === id ? { ...l, fadeMs: Math.max(0, ms) } : l)),
       };
     }),
+
+  setLookShapeOnFader: (id, v) => {
+    set((s) => {
+      if (!s.looks.some((l) => l.id === id)) return {};
+      const hist = record(s, null);
+      return {
+        ...hist,
+        looks: s.looks.map((l) => (l.id === id ? { ...l, shapeOnFader: v } : l)),
+      };
+    });
+    syncEffectEngine(); // 모드 변경 즉시 반영(엔진이 이미 돌면 no-op)
+  },
 
   // ─── 콘솔: 페이더 ───
   assignFader: (slotIndex, assignment) => {
@@ -1605,6 +1666,13 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     set((s) => ({
       effects: s.effects.map((e) => (e.id === id ? { ...e, ...patch } : e)),
     })),
+
+  setEffectShapeOnFader: (id, v) => {
+    set((s) => ({
+      effects: s.effects.map((e) => (e.id === id ? { ...e, shapeOnFader: v } : e)),
+    }));
+    syncEffectEngine();
+  },
 
   removeEffect: (id) => {
     set((s) => ({
