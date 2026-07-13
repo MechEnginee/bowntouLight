@@ -32,6 +32,7 @@ export interface RecordingBaseline {
   faderLevels: number[]; // 길이 10
   grandMaster: number;
   blackout: boolean;
+  bpm?: number; // 녹화 시점 BPM(D-8) — 재생 시 셰이프 속도 복원. 옵셔널(구버전 호환)
 }
 
 function mid(): string {

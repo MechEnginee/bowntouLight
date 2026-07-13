@@ -163,6 +163,7 @@ export function AudioTimeline({
       faderLevels: s.faderSlots.map((sl) => sl.level),
       grandMaster: s.grandMaster,
       blackout: s.blackout,
+      bpm: s.bpm,
     });
     try {
       await playAudio();

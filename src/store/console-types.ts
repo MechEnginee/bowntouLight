@@ -24,6 +24,8 @@ export interface LookDef {
   name: string;
   values: Record<string /* fixtureId */, LookValues>;
   fadeMs: number;
+  /** ★ 큐(룩)에 기록된 셰이프. 없거나 빈 배열 = 셰이프 없는 룩 (기존과 동일) */
+  effects?: EffectSnapshot[];
 }
 
 export type FaderAssignment =
@@ -50,10 +52,24 @@ export const DEFAULT_LOOK_FADE_MS = 2000; // D-2
 //  - dimmerWave: 현재 밝기를 물결처럼 오르내리게 곱함(디머 웨이브/체이스)
 export type ShapeType = "circle" | "figure8" | "pan" | "tilt" | "dimmerWave";
 
+// 신설 — 큐(룩)에 기록되는 셰이프 사본. 런타임 필드(running) 없음.
+export interface EffectSnapshot {
+  shape: ShapeType;
+  /** 진폭 — 움직임: 도(°) 0..90, dimmerWave: 깊이 0..1 (EffectDef와 동일 단위) */
+  size: number;
+  beatsPerCycle: number;
+  /** 위상(Phase) — 픽스처당 위상차(도) */
+  spread: number;
+  direction: 1 | -1;
+  step?: boolean;
+  /** 저장 시점에 해석된 대상 픽스처 (그룹 참조 아님) */
+  fixtureIds: string[];
+}
+
 export interface EffectDef {
   id: string;
   name: string;
-  groupId: string; // 대상 그룹
+  fixtureIds: string[]; // ★ groupId 대체 — 생성 시점에 그룹 멤버/선택을 해석해 저장
   shape: ShapeType;
   /** 진폭 — 움직임: 도(°) 0..90, dimmerWave: 깊이 0..1 */
   size: number;

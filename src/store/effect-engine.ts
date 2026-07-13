@@ -7,7 +7,18 @@
 // scene-store와 순환 import지만 함수 호출 시점에만 참조하므로 런타임 안전(fade-engine과 동일 패턴).
 
 import { useSceneStore } from "./scene-store";
-import type { EffectDef, LiveOffset } from "./console-types";
+import type { ShapeType, LiveOffset } from "./console-types";
+
+/** 셰이프 오실레이션에 필요한 최소 필드 — EffectDef와 EffectSnapshot 양쪽이 구조적으로 만족한다. */
+interface ShapeSource {
+  shape: ShapeType;
+  size: number;
+  beatsPerCycle: number;
+  spread: number;
+  direction: 1 | -1;
+  step?: boolean;
+  fixtureIds: string[];
+}
 
 const TAU = Math.PI * 2;
 const d2r = (d: number) => (d * Math.PI) / 180;
@@ -26,7 +37,7 @@ let beats = 0; // 누적 박자(위상 기준)
  * 이펙트 강도(0..1). 페이더 슬롯에 올라가 있으면 그 레벨(Flash=1)이 크기를 제어(실기기 방식).
  * 슬롯에 없으면 화면 실행 버튼(running)으로 0/1.
  */
-function effectIntensity(
+export function effectIntensity(
   state: ReturnType<typeof useSceneStore.getState>,
   effectId: string,
   running: boolean,
@@ -40,7 +51,7 @@ function effectIntensity(
 
 // effect: 이펙트 정의, base: 시간 위상(rad), phaseK: 이 픽스처의 위상 오프셋(rad)
 // intensity: 페이더 레벨(0..1) — 크기/깊이를 스케일(실기기: 페이더가 셰이프 크기를 제어)
-function shapeOffset(effect: EffectDef, base: number, phaseK: number, acc: LiveOffset, intensity: number) {
+function shapeOffset(effect: ShapeSource, base: number, phaseK: number, acc: LiveOffset, intensity: number) {
   const { shape } = effect;
   const size = effect.size * intensity;
   const phase = base + phaseK;
@@ -76,6 +87,27 @@ function shapeOffset(effect: EffectDef, base: number, phaseK: number, acc: LiveO
   }
 }
 
+/** 한 소스(standalone 이펙트 또는 룩 내장 스냅샷)를 fixtureIds 대상에 적용. 적용 여부 반환. */
+function applySource(
+  state: ReturnType<typeof useSceneStore.getState>,
+  src: ShapeSource,
+  intensity: number,
+  offsets: Record<string, LiveOffset>,
+): boolean {
+  if (src.fixtureIds.length === 0) return false;
+  const spreadRad = d2r(src.spread); // 픽스처당 위상차 (Titan Phase 모델)
+  const base = (TAU * beats) / Math.max(0.01, src.beatsPerCycle) * src.direction;
+  let touched = false;
+  src.fixtureIds.forEach((id, k) => {
+    if (!state.fixtures[id]) return; // 삭제된 픽스처는 조용히 스킵
+    const phaseK = spreadRad * k;
+    const acc = offsets[id] ?? (offsets[id] = { pan: 0, tilt: 0, dimMul: 1 });
+    shapeOffset(src, base, phaseK, acc, intensity);
+    touched = true;
+  });
+  return touched;
+}
+
 function tick(now: number) {
   const state = useSceneStore.getState();
   const dt = lastTime ? (now - lastTime) / 1000 : 0;
@@ -85,22 +117,24 @@ function tick(now: number) {
   const offsets: Record<string, LiveOffset> = {};
   let activeCount = 0;
 
+  // 계열 A — standalone 이펙트(셰이프 전용 큐 포함)
   for (const eff of state.effects) {
     const intensity = effectIntensity(state, eff.id, eff.running);
     if (intensity <= 0) continue;
-    const group = state.groups.find((g) => g.id === eff.groupId);
-    if (!group || group.fixtureIds.length === 0) continue;
-    activeCount++;
-    const ids = group.fixtureIds;
-    const spreadRad = d2r(eff.spread); // 픽스처당 위상차 (Titan Phase 모델)
-    const base = (TAU * beats) / Math.max(0.01, eff.beatsPerCycle) * eff.direction;
+    if (applySource(state, eff, intensity, offsets)) activeCount++;
+  }
 
-    ids.forEach((id, k) => {
-      if (!state.fixtures[id]) return;
-      const phaseK = spreadRad * k;
-      const acc = offsets[id] ?? (offsets[id] = { pan: 0, tilt: 0, dimMul: 1 });
-      shapeOffset(eff, base, phaseK, acc, intensity);
-    });
+  // 계열 B — 룩 슬롯에 내장된 셰이프 스냅샷(레벨>0 또는 Flash)
+  for (const slot of state.faderSlots) {
+    const a = slot.assignment;
+    if (a?.kind !== "look") continue;
+    const intensity = slot.flashHeld ? 1 : slot.level;
+    if (intensity <= 0) continue;
+    const look = state.looks.find((l) => l.id === a.lookId);
+    if (!look?.effects?.length) continue;
+    for (const snap of look.effects) {
+      if (applySource(state, snap, intensity, offsets)) activeCount++;
+    }
   }
 
   useSceneStore.getState().setLiveOffsets(offsets);
@@ -116,7 +150,17 @@ function tick(now: number) {
 /** 이펙트 상태 변경(실행/정지, 페이더 레벨 등) 후 호출 — 활성 이펙트가 있으면 루프를 켠다. */
 export function syncEffectEngine(): void {
   const state = useSceneStore.getState();
-  const anyActive = state.effects.some((e) => effectIntensity(state, e.id, e.running) > 0);
+  // 계열 A: standalone 이펙트
+  const anyEffectActive = state.effects.some((e) => effectIntensity(state, e.id, e.running) > 0);
+  // 계열 B: 셰이프 포함 룩이 올라간(레벨>0 또는 Flash) 슬롯
+  const anyLookShapeActive = state.faderSlots.some((sl) => {
+    const a = sl.assignment;
+    if (a?.kind !== "look") return false;
+    if ((sl.flashHeld ? 1 : sl.level) <= 0) return false;
+    const look = state.looks.find((l) => l.id === a.lookId);
+    return !!look?.effects?.length;
+  });
+  const anyActive = anyEffectActive || anyLookShapeActive;
   if (anyActive && rafHandle == null) {
     lastTime = 0;
     rafHandle = requestAnimationFrame(tick);
