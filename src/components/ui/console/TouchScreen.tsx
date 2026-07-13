@@ -16,10 +16,26 @@
 //   - 우측 Program Menu / Workspaces / I P C G B E S FX 탭 → 실기기 외형 재현(비활성 장식)
 
 import { useState, useRef, useEffect } from "react";
-import { useSceneStore } from "../../../store/scene-store";
+import { useSceneStore, lookBanks } from "../../../store/scene-store";
 import type { FixtureType } from "../../../config/fixtures.config";
-import type { FaderAssignment, ShapeType, EffectDef } from "../../../store/console-types";
+import type {
+  FaderAssignment,
+  ShapeType,
+  EffectDef,
+  LookMask,
+  ShapeOnFader,
+} from "../../../store/console-types";
+import { FULL_MASK } from "../../../store/console-types";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+
+// 셰이프 페이더 제어 모드 라벨 (룩/이펙트 공용)
+const SHAPE_ON_FADER_LABEL: Record<ShapeOnFader, string> = {
+  size: "크기",
+  speed: "속도",
+  both: "둘 다",
+  none: "없음",
+};
+const SHAPE_ON_FADER_ORDER: ShapeOnFader[] = ["size", "speed", "both", "none"];
 
 const SCREEN_BG = "#0d1322";
 const WINDOW_BODY = "#141d30";
@@ -499,7 +515,8 @@ function GroupsWindow() {
               label: "이펙트 추가",
               submenu: EFFECT_SHAPES.map((sh) => ({
                 label: SHAPE_MENU_LABEL[sh],
-                onSelect: () => useSceneStore.getState().createEffect(g.id, sh),
+                onSelect: () =>
+                  useSceneStore.getState().createEffect(sh, g.fixtureIds, `${g.name} ${SHAPE_MENU_LABEL[sh]}`),
               })),
             },
             { label: "삭제", danger: true, onSelect: () => useSceneStore.getState().deleteGroup(g.id) },
@@ -514,11 +531,124 @@ function GroupsWindow() {
 // Playbacks 창 — 룩(Look) 그리드. 실기기 Playbacks 창(페이더에 올라가는 것) 재현.
 // 클릭=적용, 더블클릭=이름편집, 우클릭=메뉴, +=현재 상태 저장.
 // ─────────────────────────────────────────────────────────────────────────
+// 룩 저장 마스크 팝오버 (Set Mask) — 4개 계열 토글 + 저장. 외부 클릭/Escape로 닫힘.
+const MASK_BANKS: { k: keyof LookMask; label: string }[] = [
+  { k: "intensity", label: "I 디머" },
+  { k: "position", label: "P 위치" },
+  { k: "colour", label: "C 색" },
+  { k: "shapes", label: "FX 셰이프" },
+];
+const BANK_SHORT: Record<keyof LookMask, string> = {
+  intensity: "I",
+  position: "P",
+  colour: "C",
+  shapes: "FX",
+};
+function banksLabel(m: LookMask): string {
+  return (Object.keys(BANK_SHORT) as (keyof LookMask)[])
+    .filter((k) => m[k])
+    .map((k) => BANK_SHORT[k])
+    .join("·");
+}
+
+function MaskPopover({
+  x,
+  y,
+  onSave,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  onSave: (m: LookMask) => void;
+  onClose: () => void;
+}) {
+  const [mask, setMask] = useState<LookMask>({ ...FULL_MASK });
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const t = setTimeout(() => document.addEventListener("mousedown", onDoc), 0); // 여는 클릭이 즉시 닫지 않도록
+    document.addEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  const anyOn = MASK_BANKS.some((b) => mask[b.k]);
+  return (
+    <div
+      ref={ref}
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        position: "fixed",
+        left: x,
+        top: y,
+        zIndex: 1000,
+        background: "#182238",
+        border: "1px solid #3a5a8c",
+        borderRadius: 6,
+        padding: 8,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
+      }}
+    >
+      <div style={{ fontSize: 9.5, color: "#9ab8e0", fontWeight: 700 }}>기록할 계열 (Set Mask)</div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", maxWidth: 180 }}>
+        {MASK_BANKS.map((b) => (
+          <button
+            key={b.k}
+            onClick={() => setMask((m) => ({ ...m, [b.k]: !m[b.k] }))}
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              padding: "3px 7px",
+              borderRadius: 4,
+              border: `1px solid ${mask[b.k] ? "#7ec4ff" : "#33425f"}`,
+              background: mask[b.k] ? "#3f6bb0" : "#1b2338",
+              color: mask[b.k] ? "#fff" : "#6b7da0",
+              cursor: "pointer",
+            }}
+          >
+            {b.label}
+          </button>
+        ))}
+      </div>
+      <button
+        disabled={!anyOn}
+        onClick={() => {
+          onSave(mask);
+          onClose();
+        }}
+        style={{
+          fontSize: 9.5,
+          fontWeight: 700,
+          padding: "4px 8px",
+          borderRadius: 4,
+          border: "1px solid #3a5a8c",
+          background: anyOn ? "#2c7a4a" : "#20283a",
+          color: anyOn ? "#fff" : "#5a6a88",
+          cursor: anyOn ? "pointer" : "default",
+        }}
+      >
+        저장
+      </button>
+    </div>
+  );
+}
+
 function PlaybacksWindow() {
   const looks = useSceneStore((s) => s.looks);
   const selectedIds = useSceneStore((s) => s.selectedIds);
   const faderSlots = useSceneStore((s) => s.faderSlots);
   const [menu, setMenu] = useState<{ x: number; y: number; lookId: string } | null>(null);
+  const [maskPop, setMaskPop] = useState<{ x: number; y: number } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
@@ -542,6 +672,10 @@ function PlaybacksWindow() {
       {looks.map((l) => {
         const sw = swatchColor(l.values);
         const slot = slotOfLook(l.id);
+        const hasShapes = !!l.effects?.length;
+        const banks = lookBanks(l);
+        // I/P/C 3계열이 모두 있으면 "전체"로 보고 칩 숨김(어수선함 방지). 셰이프는 ✦로 별도 표기.
+        const partial = !(banks.intensity && banks.position && banks.colour);
         return (
           <button
             key={l.id}
@@ -565,7 +699,9 @@ function PlaybacksWindow() {
             title={
               slot >= 0
                 ? `클릭=페이더 ${slot + 1} 발사/끄기 · ${l.fadeMs}ms 페이드`
-                : `클릭=프로그래머로 적용 · ${l.fadeMs}ms 페이드`
+                : hasShapes
+                  ? `클릭=베이스 값만 적용(셰이프는 페이더에서만 실행) · ${l.fadeMs}ms 페이드`
+                  : `클릭=프로그래머로 적용 · ${l.fadeMs}ms 페이드`
             }
             style={{
               width: 74,
@@ -612,9 +748,21 @@ function PlaybacksWindow() {
                   style={inlineInputStyle}
                 />
               ) : (
-                <span style={{ wordBreak: "keep-all" }}>{l.name}</span>
+                <span style={{ wordBreak: "keep-all" }}>
+                  {hasShapes && (
+                    <span style={{ color: "#c9a6ff", marginRight: 3 }} title="셰이프 포함 큐">
+                      ✦
+                    </span>
+                  )}
+                  {l.name}
+                </span>
               )}
             </div>
+            {partial && (
+              <span style={{ fontSize: 8, color: "#c9a6ff", opacity: 0.9, letterSpacing: 0.3 }}>
+                {banksLabel(banks)}
+              </span>
+            )}
             {slot >= 0 && (
               <span style={{ fontSize: 8, color: "#9ec8ff", opacity: 0.9 }}>▸ 페이더 {slot + 1}</span>
             )}
@@ -623,12 +771,29 @@ function PlaybacksWindow() {
       })}
       <button
         onClick={() => useSceneStore.getState().saveLook()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (selectedIds.length > 0) setMaskPop({ x: e.clientX, y: e.clientY });
+        }}
         disabled={selectedIds.length === 0}
-        title={selectedIds.length === 0 ? "픽스처를 먼저 선택하세요" : "현재 상태를 룩으로 저장"}
+        title={
+          selectedIds.length === 0
+            ? "픽스처를 먼저 선택하세요"
+            : "클릭=룩 저장 · 우클릭=계열 선택 저장(Set Mask)"
+        }
         style={{ ...addBtnStyle(selectedIds.length === 0), width: 74, minHeight: 46 }}
       >
         +
       </button>
+
+      {maskPop && (
+        <MaskPopover
+          x={maskPop.x}
+          y={maskPop.y}
+          onSave={(m) => useSceneStore.getState().saveLook(undefined, m)}
+          onClose={() => setMaskPop(null)}
+        />
+      )}
 
       {menu &&
         (() => {
@@ -657,6 +822,18 @@ function PlaybacksWindow() {
                 },
               ),
             },
+            // Speed on Fader — 셰이프 포함 큐에만 (Playback Options)
+            ...(l.effects?.length
+              ? [
+                  {
+                    label: `페이더 제어: ${SHAPE_ON_FADER_LABEL[l.shapeOnFader ?? "size"]}`,
+                    submenu: SHAPE_ON_FADER_ORDER.map((m) => ({
+                      label: `${SHAPE_ON_FADER_LABEL[m]}${(l.shapeOnFader ?? "size") === m ? " ✓" : ""}`,
+                      onSelect: () => useSceneStore.getState().setLookShapeOnFader(l.id, m),
+                    })),
+                  },
+                ]
+              : []),
             { label: "삭제", danger: true, onSelect: () => useSceneStore.getState().deleteLook(l.id) },
           ];
           return <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />;
@@ -757,9 +934,7 @@ const SHAPE_MENU_LABEL: Record<ShapeType, string> = {
 
 function EffectRow({ eff }: { eff: EffectDef }) {
   const isDim = eff.shape === "dimmerWave";
-  const groupSize = useSceneStore(
-    (s) => s.groups.find((g) => g.id === eff.groupId)?.fixtureIds.length ?? 0,
-  );
+  const groupSize = eff.fixtureIds.length; // 대상 픽스처 수(위상 파도 프리셋 계산용)
   const bpm = useSceneStore((s) => s.bpm); // 이펙트 속도를 BPM으로 환산해 표시(전역 템포 동기)
   const effBpm = Math.round(bpm / eff.beatsPerCycle); // 분당 사이클 수
   // 이 이펙트가 올라간 페이더 슬롯(-1=없음). 있으면 페이더가 크기를 제어(실기기 방식).
@@ -826,7 +1001,7 @@ function EffectRow({ eff }: { eff: EffectDef }) {
           onClick={() =>
             onFader ? useSceneStore.getState().assignFader(slotIndex, null) : assignToFader()
           }
-          title={onFader ? `페이더 ${slotIndex + 1}에서 내리기` : "페이더에 올리기(페이더로 크기 제어)"}
+          title={onFader ? `페이더 ${slotIndex + 1}에서 내리기` : "셰이프 전용 큐로 페이더에 올리기"}
           style={{
             ...miniBtn,
             width: "auto",
@@ -838,7 +1013,31 @@ function EffectRow({ eff }: { eff: EffectDef }) {
             borderColor: "#5a3f8c",
           }}
         >
-          {onFader ? `▸F${slotIndex + 1}` : "▸페이더"}
+          {onFader ? `▸F${slotIndex + 1}` : "▸셰이프 큐"}
+        </button>
+        {/* Speed on Fader — 페이더에 올라가 있을 때만 유효. 클릭 시 4모드 순환 */}
+        <button
+          onClick={() => {
+            if (!onFader) return;
+            const cur = eff.shapeOnFader ?? "size";
+            const next = SHAPE_ON_FADER_ORDER[(SHAPE_ON_FADER_ORDER.indexOf(cur) + 1) % SHAPE_ON_FADER_ORDER.length];
+            useSceneStore.getState().setEffectShapeOnFader(eff.id, next);
+          }}
+          disabled={!onFader}
+          title={onFader ? "페이더 제어 모드 순환 (크기/속도/둘 다/없음)" : "페이더에 올린 뒤 설정 가능"}
+          style={{
+            ...miniBtn,
+            width: "auto",
+            padding: "0 5px",
+            fontSize: 8.5,
+            fontWeight: 700,
+            color: onFader ? "#cfe4ff" : "#5a6a88",
+            background: onFader ? "#213050" : "#20283a",
+            opacity: onFader ? 1 : 0.6,
+            cursor: onFader ? "pointer" : "default",
+          }}
+        >
+          {`F:${SHAPE_ON_FADER_LABEL[eff.shapeOnFader ?? "size"]}`}
         </button>
         <button
           onClick={() => useSceneStore.getState().updateEffect(eff.id, { direction: eff.direction === 1 ? -1 : 1 })}
@@ -1054,15 +1253,62 @@ function EffSlider({
 
 function EffectsWindow() {
   const effects = useSceneStore((s) => s.effects);
+  const selectedIds = useSceneStore((s) => s.selectedIds);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const noSel = selectedIds.length === 0;
+
+  const addBtn = (
+    <button
+      onClick={(e) => {
+        if (noSel) return;
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setMenu({ x: r.left, y: r.bottom });
+      }}
+      disabled={noSel}
+      title={noSel ? "픽스처를 먼저 선택하세요" : "선택 픽스처로 셰이프 생성"}
+      style={{
+        ...miniBtn,
+        width: "auto",
+        padding: "0 7px",
+        fontSize: 11,
+        fontWeight: 800,
+        color: noSel ? "#5a6a88" : "#c9a6ff",
+        background: noSel ? "#20283a" : "#241a38",
+        borderColor: "#5a3f8c",
+        opacity: noSel ? 0.5 : 1,
+        cursor: noSel ? "default" : "pointer",
+      }}
+    >
+      ＋
+    </button>
+  );
+
   return (
-    <ScreenWindow title="Shapes and Effects" flex={1.5} bodyStyle={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <ScreenWindow
+      title="Shapes and Effects"
+      flex={1.5}
+      bodyStyle={{ display: "flex", flexDirection: "column", gap: 4 }}
+      titleExtra={addBtn}
+    >
       {effects.length === 0 ? (
         <div style={{ color: "#5a6a88", fontSize: 9.5, lineHeight: 1.5, padding: 3 }}>
-          그룹을 우클릭 → <b style={{ color: "#7f9ac4" }}>이펙트 추가</b>로
-          원·8자·좌우·상하·디머 웨이브를 겁니다. BPM은 아래 TAP으로 맞춥니다.
+          픽스처를 선택하고 위 <b style={{ color: "#c9a6ff" }}>＋</b> 또는 그룹 우클릭 →{" "}
+          <b style={{ color: "#7f9ac4" }}>이펙트 추가</b>로 원·8자·좌우·상하·디머 웨이브를 겁니다.
+          룩 저장 시 활성 셰이프가 큐에 함께 기록됩니다. BPM은 아래 TAP으로 맞춥니다.
         </div>
       ) : (
         effects.map((e) => <EffectRow key={e.id} eff={e} />)
+      )}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={EFFECT_SHAPES.map((sh) => ({
+            label: SHAPE_MENU_LABEL[sh],
+            onSelect: () => useSceneStore.getState().createEffect(sh, useSceneStore.getState().selectedIds),
+          }))}
+          onClose={() => setMenu(null)}
+        />
       )}
     </ScreenWindow>
   );

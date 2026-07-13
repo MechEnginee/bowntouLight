@@ -19,11 +19,28 @@ export interface LookValues {
   on?: boolean; // 항상 포함 (D-1)
 }
 
+/** 룩 저장 마스크 — Titan Set Mask 대응. 전부 true = 현행과 동일 */
+export interface LookMask {
+  intensity: boolean; // I — dimmer + on
+  position: boolean; // P — pan + tilt
+  colour: boolean; // C — color
+  shapes: boolean; // FX — EffectSnapshot 캡처 여부
+}
+export const FULL_MASK: LookMask = { intensity: true, position: true, colour: true, shapes: true };
+
+/** 페이더가 셰이프에 거는 것 — Titan Playback Options (Shape Size/Speed on fader) */
+export type ShapeOnFader = "size" | "speed" | "both" | "none";
+export const DEFAULT_SHAPE_ON_FADER: ShapeOnFader = "size"; // 현행 동작
+
 export interface LookDef {
   id: string;
   name: string;
   values: Record<string /* fixtureId */, LookValues>;
   fadeMs: number;
+  /** ★ 큐(룩)에 기록된 셰이프. 없거나 빈 배열 = 셰이프 없는 룩 (기존과 동일) */
+  effects?: EffectSnapshot[];
+  /** 페이더의 셰이프 제어 모드 (큐 단위). 부재 = "size" */
+  shapeOnFader?: ShapeOnFader;
 }
 
 export type FaderAssignment =
@@ -50,10 +67,24 @@ export const DEFAULT_LOOK_FADE_MS = 2000; // D-2
 //  - dimmerWave: 현재 밝기를 물결처럼 오르내리게 곱함(디머 웨이브/체이스)
 export type ShapeType = "circle" | "figure8" | "pan" | "tilt" | "dimmerWave";
 
+// 신설 — 큐(룩)에 기록되는 셰이프 사본. 런타임 필드(running) 없음.
+export interface EffectSnapshot {
+  shape: ShapeType;
+  /** 진폭 — 움직임: 도(°) 0..90, dimmerWave: 깊이 0..1 (EffectDef와 동일 단위) */
+  size: number;
+  beatsPerCycle: number;
+  /** 위상(Phase) — 픽스처당 위상차(도) */
+  spread: number;
+  direction: 1 | -1;
+  step?: boolean;
+  /** 저장 시점에 해석된 대상 픽스처 (그룹 참조 아님) */
+  fixtureIds: string[];
+}
+
 export interface EffectDef {
   id: string;
   name: string;
-  groupId: string; // 대상 그룹
+  fixtureIds: string[]; // ★ groupId 대체 — 생성 시점에 그룹 멤버/선택을 해석해 저장
   shape: ShapeType;
   /** 진폭 — 움직임: 도(°) 0..90, dimmerWave: 깊이 0..1 */
   size: number;
@@ -73,6 +104,8 @@ export interface EffectDef {
   step?: boolean;
   /** 실행 중 여부 */
   running: boolean;
+  /** 페이더의 셰이프 제어 모드 (셰이프 전용 큐에도 적용). 부재 = "size" */
+  shapeOnFader?: ShapeOnFader;
 }
 
 /** 이펙트 엔진이 매 프레임 써 넣는 렌더용 오프셋(런타임 전용 · 비영속 · undo 미기록) */

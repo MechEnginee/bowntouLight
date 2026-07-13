@@ -21,19 +21,23 @@ import {
   type FaderAssignment,
   type FaderSlot,
   type EffectDef,
+  type EffectSnapshot,
   type ShapeType,
   type LiveOffset,
+  type LookMask,
+  type ShapeOnFader,
+  FULL_MASK,
 } from "./console-types";
 import { startFade } from "./fade-engine";
 import { syncEffectEngine } from "./effect-engine";
-import { useAudioStore, type AudioMarker } from "./audio-store";
+import { useAudioStore, type AudioMarker, type RecordingBaseline } from "./audio-store";
 
 export type TransformMode = "translate" | "rotate" | "scale";
 export type Vec3 = [number, number, number];
 
 // ─── JSON 내보내기/불러오기 형식 ───
 export const SCENE_FORMAT = "worship-lighting-scene";
-export const SCENE_VERSION = 2;
+export const SCENE_VERSION = 3;
 
 export interface SceneObjectFile {
   objectId: string; // 내부 관리용 해시 id
@@ -82,6 +86,10 @@ export interface SceneFile {
       name: string;
       fadeMs: number;
       values: Record<string, LookValues>;
+      /** v3+: 큐에 기록된 셰이프 스냅샷 */
+      effects?: EffectSnapshot[];
+      /** 페이더 셰이프 제어 모드 (부재 = "size") */
+      shapeOnFader?: ShapeOnFader;
     }>;
     faderSlots: Array<{ assignment: FaderAssignment | null; level: number }>;
     /** 이펙트 속도 동기 BPM */
@@ -91,11 +99,15 @@ export interface SceneFile {
     /** 사용자가 Colours 창에 추가한 커스텀 색(#rrggbb) */
     customColors?: string[];
   };
-  /** v2+: 음원 타임라인 — 파일명+길이+메모 마커 저장(오디오 원본은 재로드). */
+  /** v2+: 음원 타임라인 — 파일명+길이+메모 마커 + 조명 녹화 저장(오디오 원본은 재로드). */
   audio?: {
     fileName: string | null;
     duration?: number; // 초 — 재링크 시 동일 음원 판정용
     markers: Array<{ id: string; time: number; text: string; color?: string }>;
+    /** 조명 녹화 이벤트 (음원 시간축) */
+    events?: Array<{ id: string; t: number; kind: string; slot?: number; level?: number; held?: boolean; on?: boolean }>;
+    /** 녹화 기준상태 */
+    baseline?: { faderLevels: number[]; grandMaster: number; blackout: boolean; bpm?: number } | null;
   };
 }
 
@@ -229,12 +241,15 @@ interface SceneState {
   setGroupMaster: (id: string, level: number) => void;
 
   // ─── 콘솔: 룩 ───
-  saveLook: (name?: string) => void;
+  /** 룩 저장. mask 미지정 = 전체 저장(현행). Set Mask 대응 */
+  saveLook: (name?: string, mask?: LookMask) => void;
   applyLook: (id: string) => void;
   updateLook: (id: string) => void;
   renameLook: (id: string, name: string) => void;
   deleteLook: (id: string) => void;
   setLookFade: (id: string, ms: number) => void;
+  /** 룩의 페이더 셰이프 제어 모드 설정 (Speed on Fader 등) */
+  setLookShapeOnFader: (id: string, v: ShapeOnFader) => void;
 
   // ─── 콘솔: 페이더 ───
   assignFader: (slotIndex: number, assignment: FaderAssignment | null) => void;
@@ -242,11 +257,17 @@ interface SceneState {
   setFlashHeld: (slotIndex: number, held: boolean) => void;
   setGrandMaster: (level: number) => void;
   toggleBlackout: () => void;
+  /** 블랙아웃을 특정 값으로 설정 (조명 녹화 재생 시 사용) */
+  setBlackout: (on: boolean) => void;
+  /** 조명 녹화 기준상태로 콘솔 라이브 상태를 리셋 (재생/탐색 재구성용) */
+  applyRecordingBaseline: (b: RecordingBaseline) => void;
 
   // ─── 콘솔: 셰이프/이펙트 ───
-  /** 그룹을 대상으로 이펙트 생성(기본 실행 상태). 그룹이 비면 no-op */
-  createEffect: (groupId: string, shape: ShapeType) => void;
+  /** 지정한 픽스처를 대상으로 이펙트 생성(기본 실행 상태). 대상이 비면 no-op */
+  createEffect: (shape: ShapeType, fixtureIds: string[], name?: string) => void;
   updateEffect: (id: string, patch: Partial<EffectDef>) => void;
+  /** 셰이프 전용 큐의 페이더 제어 모드 설정 */
+  setEffectShapeOnFader: (id: string, v: ShapeOnFader) => void;
   removeEffect: (id: string) => void;
   toggleEffect: (id: string) => void;
   /** 모든 이펙트 정지·제거 후 원위치 복귀 */
@@ -343,27 +364,47 @@ function nextLabel(prefix: string, existingNames: string[]): string {
 function snapshotLookValues(
   fixtures: Record<string, FixtureRuntime>,
   ids: string[],
+  mask: LookMask = FULL_MASK,
 ): Record<string, LookValues> {
   const values: Record<string, LookValues> = {};
   for (const id of ids) {
     const f = fixtures[id];
     if (!f) continue;
-    const lv: LookValues = { dimmer: f.dimmer, on: f.on };
+    const lv: LookValues = {};
+    if (mask.intensity) {
+      lv.dimmer = f.dimmer;
+      lv.on = f.on;
+    }
     if (
-      f.type === "movingHead" ||
-      f.type === "par" ||
-      f.type === "strobe" ||
-      f.type === "light"
+      mask.colour &&
+      (f.type === "movingHead" ||
+        f.type === "par" ||
+        f.type === "strobe" ||
+        f.type === "light")
     ) {
       lv.color = f.color;
     }
-    if (f.type === "movingHead" || f.type === "par") {
+    if (mask.position && (f.type === "movingHead" || f.type === "par")) {
       lv.pan = f.pan;
       lv.tilt = f.tilt;
     }
-    values[id] = lv;
+    // 마스크 적용 결과 빈 객체면 제외 (빈 룩 방지)
+    if (Object.keys(lv).length > 0) values[id] = lv;
   }
   return values;
+}
+
+/** 룩 내용에서 포함된 계열을 파생 — UI 칩 표시와 updateLook 마스크 보존에 사용 */
+export function lookBanks(look: LookDef): LookMask {
+  let intensity = false,
+    position = false,
+    colour = false;
+  for (const lv of Object.values(look.values)) {
+    if (lv.dimmer !== undefined || lv.on !== undefined) intensity = true;
+    if (lv.pan !== undefined || lv.tilt !== undefined) position = true;
+    if (lv.color !== undefined) colour = true;
+  }
+  return { intensity, position, colour, shapes: !!look.effects?.length };
 }
 
 function defaultFaderSlots(): FaderSlot[] {
@@ -446,6 +487,33 @@ const EFFECT_PRESET: Record<
   tilt: { size: 25, beatsPerCycle: 2, spread: 0, direction: 1 },
   dimmerWave: { size: 1, beatsPerCycle: 4, spread: 0, direction: 1 },
 };
+
+// 룩 저장 시 캡처할 셰이프 스냅샷 계산 — §5-1 / D-1.
+//  대상 = 활성(intensity>0) ∧ 선택 픽스처와 교집합. fixtureIds는 교집합으로 축소.
+//  반환: 스냅샷 배열 + 캡처된 원본 이펙트 id(저장 후 정지 대상).
+function captureEffects(s: SceneState): { snapshots: EffectSnapshot[]; sourceIds: string[] } {
+  const sel = new Set(s.selectedIds);
+  const snapshots: EffectSnapshot[] = [];
+  const sourceIds: string[] = [];
+  for (const e of s.effects) {
+    // N-1: 페이더에 올라간 셰이프 전용 큐(발동된 것)는 룩에 복제하지 않는다
+    if (s.faderSlots.some((sl) => sl.assignment?.kind === "effect" && sl.assignment.effectId === e.id)) continue;
+    if (!e.running) continue; // 프리뷰 실행 중인 것만 (슬롯 경로 제외 후엔 running만 보면 됨)
+    const overlap = e.fixtureIds.filter((fid) => sel.has(fid));
+    if (overlap.length === 0) continue; // 선택과 교집합 없으면 제외
+    snapshots.push({
+      shape: e.shape,
+      size: e.size,
+      beatsPerCycle: e.beatsPerCycle,
+      spread: e.spread,
+      direction: e.direction,
+      step: e.step,
+      fixtureIds: overlap,
+    });
+    sourceIds.push(e.id);
+  }
+  return { snapshots, sourceIds };
+}
 
 // 탭 템포 타임스탬프 버퍼(런타임 전용)
 const tapTimes: number[] = [];
@@ -596,6 +664,8 @@ function coerceLooks(
           ? Math.max(0, o.fadeMs)
           : DEFAULT_LOOK_FADE_MS,
       values,
+      effects: coerceEffectSnapshots(o.effects, fixtures),
+      shapeOnFader: coerceShapeOnFader(o.shapeOnFader),
     });
   }
   return out;
@@ -642,20 +712,39 @@ function coerceFaderSlots(
 }
 
 const VALID_SHAPES: ShapeType[] = ["circle", "figure8", "pan", "tilt", "dimmerWave"];
+const VALID_SHAPE_ON_FADER: ShapeOnFader[] = ["size", "speed", "both", "none"];
+/** o.shapeOnFader가 유효한 4값 중 하나면 채택, 아니면 undefined("size"로 동작) */
+function coerceShapeOnFader(v: unknown): ShapeOnFader | undefined {
+  return typeof v === "string" && (VALID_SHAPE_ON_FADER as string[]).includes(v)
+    ? (v as ShapeOnFader)
+    : undefined;
+}
 
-function coerceEffects(raw: unknown, groups: FixtureGroupDef[]): EffectDef[] {
+// standalone 이펙트 코어싱 + v2(groupId)→v3(fixtureIds) 마이그레이션.
+function coerceEffects(
+  raw: unknown,
+  groups: FixtureGroupDef[],
+  fixtures: Record<string, FixtureRuntime>,
+): EffectDef[] {
   if (!Array.isArray(raw)) return [];
-  const validGroupIds = new Set(groups.map((g) => g.id));
+  const groupMembers = new Map(groups.map((g) => [g.id, g.fixtureIds]));
   const out: EffectDef[] = [];
   for (const e of raw) {
     if (!e || typeof e !== "object") continue;
     const o = e as Record<string, unknown>;
-    if (typeof o.groupId !== "string" || !validGroupIds.has(o.groupId)) continue; // 그룹 사라졌으면 스킵
     if (typeof o.shape !== "string" || !VALID_SHAPES.includes(o.shape as ShapeType)) continue;
+    // 대상 해석: v3 fixtureIds 우선, 없으면 v2 groupId를 현재 그룹 멤버로 마이그레이션
+    let fixtureIds: string[] | null = null;
+    if (Array.isArray(o.fixtureIds)) {
+      fixtureIds = o.fixtureIds.filter((x): x is string => typeof x === "string" && !!fixtures[x]);
+    } else if (typeof o.groupId === "string" && groupMembers.has(o.groupId)) {
+      fixtureIds = groupMembers.get(o.groupId)!.filter((x) => !!fixtures[x]);
+    }
+    if (!fixtureIds || fixtureIds.length === 0) continue; // 대상 해석 불가 → 드롭
     out.push({
       id: typeof o.id === "string" && o.id ? o.id : genId(),
       name: typeof o.name === "string" ? o.name : "이펙트",
-      groupId: o.groupId,
+      fixtureIds,
       shape: o.shape as ShapeType,
       size: typeof o.size === "number" && Number.isFinite(o.size) ? o.size : 30,
       beatsPerCycle:
@@ -666,9 +755,41 @@ function coerceEffects(raw: unknown, groups: FixtureGroupDef[]): EffectDef[] {
       direction: o.direction === -1 ? -1 : 1,
       step: o.step === true,
       running: o.running !== false,
+      shapeOnFader: coerceShapeOnFader(o.shapeOnFader),
     });
   }
   return out;
+}
+
+// 룩 내장 셰이프 스냅샷 코어싱(존재하는 픽스처만). 비면 undefined.
+function coerceEffectSnapshots(
+  raw: unknown,
+  fixtures: Record<string, FixtureRuntime>,
+): EffectSnapshot[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: EffectSnapshot[] = [];
+  for (const e of raw) {
+    if (!e || typeof e !== "object") continue;
+    const o = e as Record<string, unknown>;
+    if (typeof o.shape !== "string" || !VALID_SHAPES.includes(o.shape as ShapeType)) continue;
+    const fixtureIds = Array.isArray(o.fixtureIds)
+      ? o.fixtureIds.filter((x): x is string => typeof x === "string" && !!fixtures[x])
+      : [];
+    if (fixtureIds.length === 0) continue;
+    out.push({
+      shape: o.shape as ShapeType,
+      size: typeof o.size === "number" && Number.isFinite(o.size) ? o.size : 30,
+      beatsPerCycle:
+        typeof o.beatsPerCycle === "number" && Number.isFinite(o.beatsPerCycle)
+          ? clamp(o.beatsPerCycle, 0.5, 16)
+          : 4,
+      spread: typeof o.spread === "number" && Number.isFinite(o.spread) ? clamp(o.spread, 0, 360) : 0,
+      direction: o.direction === -1 ? -1 : 1,
+      step: o.step === true,
+      fixtureIds,
+    });
+  }
+  return out.length ? out : undefined;
 }
 
 export const useSceneStore = create<SceneState>()((set, get) => ({
@@ -764,6 +885,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           name: l.name,
           fadeMs: l.fadeMs,
           values: { ...l.values },
+          effects: l.effects?.map((sn) => ({ ...sn, fixtureIds: [...sn.fixtureIds] })),
+          shapeOnFader: l.shapeOnFader,
         })),
         faderSlots: s.faderSlots.map((sl) => ({
           assignment: sl.assignment,
@@ -779,6 +902,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           fileName: a.fileName,
           duration: a.loaded ? a.duration : a.savedDuration,
           markers: a.markers.map((m) => ({ ...m })),
+          events: a.events.map((e) => ({ ...e })),
+          baseline: a.baseline,
         };
       })(),
     };
@@ -836,7 +961,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     // v2 콘솔 섹션 (v1이거나 부재 시 빈 콘솔로 초기화 — 하위호환 하드 요구사항)
     const groups = coerceGroups(d.console?.groups, fixtures);
     const looks = coerceLooks(d.console?.looks, fixtures);
-    const effects = coerceEffects(d.console?.effects, groups);
+    const effects = coerceEffects(d.console?.effects, groups, fixtures);
     const faderSlots = coerceFaderSlots(d.console?.faderSlots, groups, looks, effects);
     const grandMaster = clamp01(num(d.console?.grandMaster, 1));
     const bpm = clamp(num(d.console?.bpm, DEFAULT_BPM), 20, 400);
@@ -892,6 +1017,39 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       const audioDur =
         typeof rawAudio?.duration === "number" && Number.isFinite(rawAudio.duration) ? rawAudio.duration : 0;
       useAudioStore.getState().restoreFromScene(fileName, audioDur, markers);
+
+      // 조명 녹화 이벤트/기준상태 복원 (방어적 파싱)
+      const VALID_KINDS = ["fader", "flash", "blackout", "grand"];
+      const events = Array.isArray(rawAudio?.events)
+        ? rawAudio.events
+            .filter(
+              (e) =>
+                !!e && typeof e.t === "number" && Number.isFinite(e.t) && typeof e.kind === "string" && VALID_KINDS.includes(e.kind),
+            )
+            .map((e) => ({
+              id: typeof e.id === "string" ? e.id : genId(),
+              t: e.t,
+              kind: e.kind as "fader" | "flash" | "blackout" | "grand",
+              slot: typeof e.slot === "number" ? e.slot : undefined,
+              level: typeof e.level === "number" ? e.level : undefined,
+              held: typeof e.held === "boolean" ? e.held : undefined,
+              on: typeof e.on === "boolean" ? e.on : undefined,
+            }))
+        : [];
+      const rawBase = rawAudio?.baseline;
+      const baseline =
+        rawBase && Array.isArray(rawBase.faderLevels) && typeof rawBase.grandMaster === "number"
+          ? {
+              faderLevels: rawBase.faderLevels.map((n) => (typeof n === "number" ? clamp01(n) : 0)),
+              grandMaster: clamp01(rawBase.grandMaster),
+              blackout: rawBase.blackout === true,
+              bpm:
+                typeof rawBase.bpm === "number" && Number.isFinite(rawBase.bpm)
+                  ? clamp(rawBase.bpm, 20, 400)
+                  : undefined,
+            }
+          : null;
+      useAudioStore.getState().setRecording(events, baseline);
     }
     return { ok: true };
   },
@@ -1055,7 +1213,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       return { ...hist, fixtures: patch(s.fixtures, id, { name }) };
     }),
 
-  removeObjects: (ids) =>
+  removeObjects: (ids) => {
     set((s) => {
       if (ids.length === 0) return {};
       const hist = record(s, null);
@@ -1066,15 +1224,25 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         fixtureIds: g.fixtureIds.filter((fid) => !del.has(fid)),
       }));
       const looks = s.looks.map((l) => {
-        const hasDangling = Object.keys(l.values).some((fid) => del.has(fid));
-        if (!hasDangling) return l;
-        return {
-          ...l,
-          values: Object.fromEntries(
-            Object.entries(l.values).filter(([fid]) => !del.has(fid)),
-          ),
-        };
+        const danglingVals = Object.keys(l.values).some((fid) => del.has(fid));
+        const danglingShapes = l.effects?.some((sn) => sn.fixtureIds.some((fid) => del.has(fid)));
+        if (!danglingVals && !danglingShapes) return l;
+        const values = danglingVals
+          ? Object.fromEntries(Object.entries(l.values).filter(([fid]) => !del.has(fid)))
+          : l.values;
+        let effects = l.effects;
+        if (danglingShapes && l.effects) {
+          const pruned = l.effects
+            .map((sn) => ({ ...sn, fixtureIds: sn.fixtureIds.filter((fid) => !del.has(fid)) }))
+            .filter((sn) => sn.fixtureIds.length > 0);
+          effects = pruned.length ? pruned : undefined;
+        }
+        return { ...l, values, effects };
       });
+      // standalone 이펙트도 대상 픽스처 정리 — 비면 이펙트 제거
+      const effects = s.effects
+        .map((e) => ({ ...e, fixtureIds: e.fixtureIds.filter((fid) => !del.has(fid)) }))
+        .filter((e) => e.fixtureIds.length > 0);
       return {
         ...hist,
         fixtures: Object.fromEntries(
@@ -1085,8 +1253,11 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         anchorId: s.anchorId && del.has(s.anchorId) ? null : s.anchorId,
         groups,
         looks,
+        effects,
       };
-    }),
+    });
+    syncEffectEngine();
+  },
 
   copySelection: () =>
     set((s) => ({
@@ -1168,8 +1339,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
             ? { ...sl, assignment: null }
             : sl,
         ),
-        // 이 그룹을 대상으로 하던 이펙트도 제거 (라이브 — 히스토리 밖)
-        effects: s.effects.filter((e) => e.groupId !== id),
+        // 이펙트는 이제 그룹이 아닌 fixtureIds 스냅샷을 참조 → 그룹 삭제와 무관하게 유지(§5-5)
       };
     });
     syncEffectEngine();
@@ -1216,16 +1386,22 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     }),
 
   // ─── 콘솔: 룩 ───
-  saveLook: (name) =>
+  saveLook: (name, mask = FULL_MASK) => {
     set((s) => {
       if (s.selectedIds.length === 0) return {};
+      // 마스크 적용 스냅샷 (기능 A). shapes 계열이 꺼지면 셰이프 캡처·프리뷰 정지 생략.
+      const values = snapshotLookValues(s.fixtures, s.selectedIds, mask);
+      const cap = mask.shapes ? captureEffects(s) : { snapshots: [], sourceIds: [] };
+      // 전 계열 off 등으로 담을 게 아무것도 없으면 no-op (빈 룩 방지)
+      if (Object.keys(values).length === 0 && cap.snapshots.length === 0) return {};
       const hist = record(s, null);
       const id = genId();
       const look: LookDef = {
         id,
         name: name?.trim() || nextLabel("룩", s.looks.map((l) => l.name)),
-        values: snapshotLookValues(s.fixtures, s.selectedIds),
+        values,
         fadeMs: DEFAULT_LOOK_FADE_MS,
+        effects: cap.snapshots.length ? cap.snapshots : undefined,
       };
       // D-9: 빈 슬롯이 있으면 자동 할당
       const emptyIdx = s.faderSlots.findIndex((sl) => sl.assignment === null);
@@ -1237,8 +1413,15 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
                 : sl,
             )
           : s.faderSlots;
-      return { ...hist, looks: [...s.looks, look], faderSlots };
-    }),
+      // D-2: 캡처된 프리뷰 이펙트 정지(running=false). 슬롯에 올라간 건 슬롯이 강도를 유지.
+      const stop = new Set(cap.sourceIds);
+      const effects = stop.size
+        ? s.effects.map((e) => (stop.has(e.id) ? { ...e, running: false } : e))
+        : s.effects;
+      return { ...hist, looks: [...s.looks, look], faderSlots, effects };
+    });
+    syncEffectEngine();
+  },
 
   applyLook: (id) =>
     set((s) => {
@@ -1251,17 +1434,37 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       return { ...hist };
     }),
 
-  updateLook: (id) =>
+  updateLook: (id) => {
+    const pre = get();
+    const look = pre.looks.find((l) => l.id === id);
+    if (!look || pre.selectedIds.length === 0) return;
+    // 기존 룩의 계열을 파생해 마스크로 보존 — 위치 전용 룩 갱신 시 색이 끼지 않음 (§3-3)
+    const mask = lookBanks(look);
+    const values = snapshotLookValues(pre.fixtures, pre.selectedIds, mask);
+    const cap = mask.shapes ? captureEffects(pre) : { snapshots: [], sourceIds: [] };
+    // D-4: 셰이프가 있던 큐인데 재캡처 결과가 비면 확인
+    if (mask.shapes && (look.effects?.length ?? 0) > 0 && cap.snapshots.length === 0) {
+      if (typeof window !== "undefined" && !window.confirm("이 큐의 셰이프가 제거됩니다. 계속할까요?")) return;
+    }
     set((s) => {
-      if (!s.looks.some((l) => l.id === id) || s.selectedIds.length === 0) return {};
+      if (!s.looks.some((l) => l.id === id)) return {};
       const hist = record(s, null);
+      const stop = new Set(cap.sourceIds);
+      const effects = stop.size
+        ? s.effects.map((e) => (stop.has(e.id) ? { ...e, running: false } : e))
+        : s.effects;
       return {
         ...hist,
         looks: s.looks.map((l) =>
-          l.id === id ? { ...l, values: snapshotLookValues(s.fixtures, s.selectedIds) } : l,
+          l.id === id
+            ? { ...l, values, effects: cap.snapshots.length ? cap.snapshots : undefined }
+            : l,
         ),
+        effects,
       };
-    }),
+    });
+    syncEffectEngine();
+  },
 
   renameLook: (id, name) =>
     set((s) => {
@@ -1295,6 +1498,18 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       };
     }),
 
+  setLookShapeOnFader: (id, v) => {
+    set((s) => {
+      if (!s.looks.some((l) => l.id === id)) return {};
+      const hist = record(s, null);
+      return {
+        ...hist,
+        looks: s.looks.map((l) => (l.id === id ? { ...l, shapeOnFader: v } : l)),
+      };
+    });
+    syncEffectEngine(); // 모드 변경 즉시 반영(엔진이 이미 돌면 no-op)
+  },
+
   // ─── 콘솔: 페이더 ───
   assignFader: (slotIndex, assignment) => {
     const prev = get().faderSlots[slotIndex]?.assignment;
@@ -1316,7 +1531,20 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   },
 
   setFaderLevel: (slotIndex, level) => {
-    const wasEffect = get().faderSlots[slotIndex]?.assignment?.kind === "effect";
+    const pre = get();
+    const preSlot = pre.faderSlots[slotIndex];
+    const preAssign = preSlot?.assignment;
+    const wasEffect = preAssign?.kind === "effect";
+    // 셰이프 포함 룩 슬롯의 0↔양수 경계에서만 엔진 재동기(§5-3 — 드래그 중 남발 방지)
+    let lookShapeBoundary = false;
+    if (preAssign?.kind === "look") {
+      const look = pre.looks.find((l) => l.id === preAssign.lookId);
+      if (look?.effects?.length) {
+        const wasPos = preSlot.level > 0;
+        const nowPos = clamp01(level) > 0;
+        lookShapeBoundary = wasPos !== nowPos;
+      }
+    }
     set((s) => {
       const slot = s.faderSlots[slotIndex];
       if (!slot) return {};
@@ -1348,11 +1576,21 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
 
       return { faderSlots, groups }; // 라이브 조작 — undo 미기록
     });
-    if (wasEffect) syncEffectEngine(); // 이펙트 페이더 레벨 변화 → 엔진 시작/정지
+    if (wasEffect || lookShapeBoundary) syncEffectEngine(); // 이펙트/셰이프룩 레벨 경계 → 엔진 시작/정지
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "fader", slot: slotIndex, level: clamp01(level) });
   },
 
   setFlashHeld: (slotIndex, held) => {
-    const isEffect = get().faderSlots[slotIndex]?.assignment?.kind === "effect";
+    const pre = get();
+    const preAssign = pre.faderSlots[slotIndex]?.assignment;
+    const isEffect = preAssign?.kind === "effect";
+    // 셰이프 포함 룩 슬롯의 Flash → 엔진 시작(정지는 tick 자기 종료). idempotent하므로 항상 호출해도 안전.
+    let lookHasShapes = false;
+    if (preAssign?.kind === "look") {
+      const look = pre.looks.find((l) => l.id === preAssign.lookId);
+      lookHasShapes = !!look?.effects?.length;
+    }
     set((s) => {
       const slot = s.faderSlots[slotIndex];
       if (!slot) return {};
@@ -1371,28 +1609,49 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       }
       return { faderSlots }; // 라이브 조작 — undo 미기록
     });
-    if (isEffect) syncEffectEngine(); // 이펙트 슬롯 Flash → 엔진 시작/정지
+    if (isEffect || lookHasShapes) syncEffectEngine(); // 이펙트/셰이프룩 슬롯 Flash → 엔진 시작/정지
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "flash", slot: slotIndex, held });
   },
 
-  setGrandMaster: (level) => set({ grandMaster: clamp01(level) }),
+  setGrandMaster: (level) => {
+    set({ grandMaster: clamp01(level) });
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "grand", level: clamp01(level) });
+  },
 
-  toggleBlackout: () => set((s) => ({ blackout: !s.blackout })),
+  toggleBlackout: () => {
+    set((s) => ({ blackout: !s.blackout }));
+    const as = useAudioStore.getState();
+    if (as.recording) as.recordEvent({ kind: "blackout", on: get().blackout });
+  },
+
+  setBlackout: (on) => set({ blackout: on }),
+
+  applyRecordingBaseline: (b) => {
+    set((s) => ({
+      faderSlots: s.faderSlots.map((sl, i) => ({ ...sl, level: b.faderLevels[i] ?? 0, flashHeld: false })),
+      grandMaster: b.grandMaster,
+      blackout: b.blackout,
+      // D-8: 녹화 시점 BPM 복원(있으면) — 셰이프 속도를 녹화 당시와 일치
+      bpm: typeof b.bpm === "number" && Number.isFinite(b.bpm) ? clamp(b.bpm, 20, 400) : s.bpm,
+    }));
+    syncEffectEngine(); // 이펙트/셰이프룩 페이더가 기준값에 있으면 엔진 재동기
+  },
 
   // ─── 셰이프/이펙트 ───
-  createEffect: (groupId, shape) => {
+  createEffect: (shape, fixtureIds, name) => {
     const s = get();
-    const group = s.groups.find((g) => g.id === groupId);
-    if (!group || group.fixtureIds.length === 0) return;
+    const ids = fixtureIds.filter((id) => s.fixtures[id]);
+    if (ids.length === 0) return;
     const preset = EFFECT_PRESET[shape];
-    // dimmerWave는 그룹 전체에 한 바퀴 파도가 흐르도록 위상 기본값 = 360/n
+    // dimmerWave는 대상 전체에 한 바퀴 파도가 흐르도록 위상 기본값 = 360/n
     const spread =
-      shape === "dimmerWave"
-        ? Math.round(360 / Math.max(1, group.fixtureIds.length))
-        : preset.spread;
+      shape === "dimmerWave" ? Math.round(360 / Math.max(1, ids.length)) : preset.spread;
     const eff: EffectDef = {
       id: genId(),
-      name: `${group.name} ${SHAPE_LABEL[shape]}`,
-      groupId,
+      name: name?.trim() || `${SHAPE_LABEL[shape]} ${ids.length}대`,
+      fixtureIds: [...ids],
       shape,
       running: true,
       step: false,
@@ -1407,6 +1666,13 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     set((s) => ({
       effects: s.effects.map((e) => (e.id === id ? { ...e, ...patch } : e)),
     })),
+
+  setEffectShapeOnFader: (id, v) => {
+    set((s) => ({
+      effects: s.effects.map((e) => (e.id === id ? { ...e, shapeOnFader: v } : e)),
+    }));
+    syncEffectEngine();
+  },
 
   removeEffect: (id) => {
     set((s) => ({

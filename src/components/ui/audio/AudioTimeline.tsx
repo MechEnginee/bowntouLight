@@ -6,7 +6,8 @@
 //  - 바 우클릭 = 그 시점에 메모 마커 추가, 마커 우클릭 = 편집/삭제, 마커 클릭 = 점프
 
 import { useEffect, useRef, useState } from "react";
-import { useAudioStore } from "../../../store/audio-store";
+import { useAudioStore, type LightingEvent } from "../../../store/audio-store";
+import { useSceneStore } from "../../../store/scene-store";
 import { WaveformCanvas } from "./WaveformCanvas";
 import { computeWaveform } from "./waveform";
 import { ResizeHandle } from "../ResizeHandle";
@@ -21,12 +22,33 @@ import {
 } from "./audio-player";
 
 const HEADER_H = 28;
+const EVENT_LANE_H = 22; // 하단 조명 이벤트 레인 높이
 export const AUDIO_BODY_DEFAULT = 104; // 본문(파형) 기본 높이 — App 초기값
 
 function fmt(t: number): string {
   const m = Math.floor(t / 60);
   const s = Math.floor(t % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// 조명 이벤트 색/라벨 (하단 레인 표시용)
+const EVENT_COLOR: Record<LightingEvent["kind"], string> = {
+  fader: "#4aa0ff",
+  flash: "#25d0d0",
+  blackout: "#ff5a4a",
+  grand: "#e0a030",
+};
+function eventLabel(ev: LightingEvent): string {
+  switch (ev.kind) {
+    case "fader":
+      return `페이더 ${(ev.slot ?? 0) + 1} → ${Math.round((ev.level ?? 0) * 100)}%`;
+    case "flash":
+      return `Flash ${(ev.slot ?? 0) + 1} ${ev.held ? "ON" : "OFF"}`;
+    case "blackout":
+      return `블랙아웃 ${ev.on ? "ON" : "OFF"}`;
+    case "grand":
+      return `그랜드마스터 ${Math.round((ev.level ?? 0) * 100)}%`;
+  }
 }
 
 export function AudioTimeline({
@@ -49,11 +71,14 @@ export function AudioTimeline({
     markers,
     savedDuration,
     awaitingRelink,
+    events,
+    recording,
   } = useAudioStore();
 
   const trackRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
   const relinkInputRef = useRef<HTMLInputElement>(null);
+  const nextIdxRef = useRef(0); // 재생 시 다음에 발동할 조명 이벤트 인덱스
   // 길이 불일치로 확인 대기 중인 선택 파일 (예=교체 / 아니요=취소)
   const [mismatch, setMismatch] = useState<{ fileName: string; duration: number; peaks: number[] } | null>(null);
   const [width, setWidth] = useState(0);
@@ -87,6 +112,67 @@ export function AudioTimeline({
     }
   };
 
+  // ─── 조명 녹화 재생 ───
+  // 이벤트 하나를 콘솔 라이브 액션으로 실행 (재생 중 recording=false라 재기록되지 않음)
+  const dispatchLightingEvent = (ev: LightingEvent) => {
+    const s = useSceneStore.getState();
+    switch (ev.kind) {
+      case "fader":
+        if (ev.slot != null && ev.level != null) s.setFaderLevel(ev.slot, ev.level);
+        break;
+      case "flash":
+        if (ev.slot != null && ev.held != null) s.setFlashHeld(ev.slot, ev.held);
+        break;
+      case "blackout":
+        s.setBlackout(!!ev.on);
+        break;
+      case "grand":
+        if (ev.level != null) s.setGrandMaster(ev.level);
+        break;
+    }
+  };
+
+  // t 시점의 조명 상태를 재구성: 기준상태로 리셋 후 t까지의 이벤트를 재적용 (탐색/재생 시작 시)
+  const reconstructAt = (t: number) => {
+    const as = useAudioStore.getState();
+    if (as.recording || as.events.length === 0) return;
+    if (as.baseline) useSceneStore.getState().applyRecordingBaseline(as.baseline);
+    const evs = as.events;
+    let i = 0;
+    while (i < evs.length && evs[i].t <= t + 1e-6) {
+      dispatchLightingEvent(evs[i]);
+      i++;
+    }
+    nextIdxRef.current = i;
+  };
+
+  const toggleRecord = async () => {
+    const as = useAudioStore.getState();
+    if (as.recording) {
+      as.stopRecording();
+      pauseAudio();
+      as.setPlaying(false);
+      return;
+    }
+    if (as.events.length > 0 && !window.confirm("기존 조명 녹화를 덮어쓰고 새로 녹화할까요?")) return;
+    // 처음부터 녹화 — 현재 콘솔 상태를 기준으로 스냅샷
+    resetAudio();
+    movePlayhead(0);
+    const s = useSceneStore.getState();
+    as.startRecording({
+      faderLevels: s.faderSlots.map((sl) => sl.level),
+      grandMaster: s.grandMaster,
+      blackout: s.blackout,
+      bpm: s.bpm,
+    });
+    try {
+      await playAudio();
+      as.setPlaying(true);
+    } catch {
+      /* 자동재생 제한 등 무시 */
+    }
+  };
+
   // Space = 재생/일시정지 토글 (음원 활성 상태에서만). 텍스트 입력 중엔 무시.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -110,16 +196,28 @@ export function AudioTimeline({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // 재생 중에만 도는 rAF — 플레이헤드 DOM만 이동(스토어/리렌더 없음)
+  // 재생 중에만 도는 rAF — 플레이헤드 이동 + 조명 이벤트 발동
   useEffect(() => {
     if (!playing) return;
+    // 재생 시작 시: 녹화가 아니면 현재 위치까지 조명 상태 재구성
+    reconstructAt(getAudioTime());
     let id = 0;
     const loop = () => {
-      movePlayhead(getAudioTime());
+      const t = getAudioTime();
+      movePlayhead(t);
+      const as = useAudioStore.getState();
+      if (!as.recording && as.events.length > 0) {
+        const evs = as.events;
+        while (nextIdxRef.current < evs.length && evs[nextIdxRef.current].t <= t) {
+          dispatchLightingEvent(evs[nextIdxRef.current]);
+          nextIdxRef.current++;
+        }
+      }
       id = requestAnimationFrame(loop);
     };
     id = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
   const MATCH_TOL = 1.0; // 동일 음원 판정 허용 오차(초)
@@ -183,6 +281,7 @@ export function AudioTimeline({
   const doReset = () => {
     resetAudio();
     movePlayhead(0);
+    reconstructAt(0);
   };
 
   const timeFromX = (clientX: number): number => {
@@ -198,6 +297,7 @@ export function AudioTimeline({
     const t = timeFromX(e.clientX);
     seekAudio(t);
     movePlayhead(t);
+    reconstructAt(t); // 탐색 지점의 조명 상태 재구성
   };
 
   const onTrackContext = (e: React.MouseEvent) => {
@@ -221,6 +321,7 @@ export function AudioTimeline({
     e.stopPropagation();
     seekAudio(t);
     movePlayhead(t);
+    reconstructAt(t);
   };
 
   return (
@@ -261,6 +362,19 @@ export function AudioTimeline({
             </button>
             <button onClick={doReset} style={ctrlBtn} title="처음으로">
               ⏮
+            </button>
+            <button
+              onClick={toggleRecord}
+              title={recording ? "조명 녹화 정지" : "조명 녹화 시작 (처음부터 재생하며 라이브 조작 기록)"}
+              style={{
+                ...ctrlBtn,
+                background: recording ? "#c0392b" : "#3a2030",
+                color: "#fff",
+                border: recording ? "1px solid #ff6b5b" : "1px solid #6a3040",
+                boxShadow: recording ? "0 0 8px #ff6b5baa" : "none",
+              }}
+            >
+              {recording ? "⏹ REC" : "⏺ REC"}
             </button>
           </>
         )}
@@ -338,8 +452,63 @@ export function AudioTimeline({
                       >
                         {m.text}
                       </span>
-                      <div style={{ width: 1, height: bodyH - 24, background: m.color ?? "#ffd24a", opacity: 0.7 }} />
+                      <div
+                        style={{
+                          width: 1,
+                          height: Math.max(6, bodyH - 12 - 16 - EVENT_LANE_H),
+                          background: m.color ?? "#ffd24a",
+                          opacity: 0.7,
+                        }}
+                      />
                     </div>
+                  );
+                })}
+
+              {/* 하단 조명 이벤트 레인 */}
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: EVENT_LANE_H,
+                  borderTop: "1px solid #223049",
+                  background: "rgba(10,16,30,0.55)",
+                  pointerEvents: "none",
+                }}
+              />
+              {duration > 0 &&
+                events.map((ev) => {
+                  const left = (ev.t / duration) * width;
+                  return (
+                    <div
+                      key={ev.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        seekAudio(ev.t);
+                        movePlayhead(ev.t);
+                        reconstructAt(ev.t);
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        useAudioStore.getState().removeEvent(ev.id);
+                      }}
+                      title={`${fmt(ev.t)} · ${eventLabel(ev)} (클릭=이동, 우클릭=삭제)`}
+                      style={{
+                        position: "absolute",
+                        bottom: 3,
+                        left,
+                        transform: "translateX(-50%)",
+                        width: 5,
+                        height: EVENT_LANE_H - 6,
+                        borderRadius: 2,
+                        background: EVENT_COLOR[ev.kind],
+                        border: "1px solid rgba(0,0,0,0.4)",
+                        cursor: "pointer",
+                        zIndex: 3,
+                      }}
+                    />
                   );
                 })}
 

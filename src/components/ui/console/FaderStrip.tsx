@@ -14,7 +14,7 @@ import { Fader } from "./Fader";
 function legendFor(
   slot: FaderSlot,
   groups: { id: string; name: string }[],
-  looks: { id: string; name: string; values: Record<string, { color?: string }> }[],
+  looks: { id: string; name: string; values: Record<string, { color?: string }>; effects?: unknown[] }[],
   effects: { id: string; name: string }[],
 ): { text: string; color?: string } | null {
   const a = slot.assignment;
@@ -23,7 +23,9 @@ function legendFor(
     const l = looks.find((x) => x.id === a.lookId);
     if (!l) return null;
     const sw = Object.values(l.values).find((v) => v.color)?.color;
-    return { text: l.name, color: sw };
+    // ✦ = 셰이프 포함 큐. accent 색은 look 파랑 유지(보라는 셰이프 전용 큐 고유색)
+    const text = l.effects?.length ? `✦ ${l.name}` : l.name;
+    return { text, color: sw };
   }
   if (a.kind === "effect") {
     const e = effects.find((x) => x.id === a.effectId);
