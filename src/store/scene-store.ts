@@ -13,6 +13,7 @@ import * as THREE from "three";
 import { FIXTURES_CONFIG, type FixtureType } from "../config/fixtures.config";
 import {
   FADER_SLOT_COUNT,
+  FADERS_PER_PAGE,
   DEFAULT_LOOK_FADE_MS,
   DEFAULT_BPM,
   type FixtureGroupDef,
@@ -92,6 +93,8 @@ export interface SceneFile {
       shapeOnFader?: ShapeOnFader;
     }>;
     faderSlots: Array<{ assignment: FaderAssignment | null; level: number }>;
+    /** 활성 플레이백 페이지(0-based). 부재 = 0 */
+    faderPage?: number;
     /** 이펙트 속도 동기 BPM */
     bpm?: number;
     /** 셰이프/이펙트 (running 포함 — 저장 시점 실행 상태로 복원) */
@@ -167,7 +170,10 @@ interface SceneState {
   backgroundColor: [number, number, number];
 
   // ─── 콘솔: 그룹/룩/페이더 (faderSlots는 assignment 외 level·flashHeld 포함 — 라이브 상태) ───
+  /** 전체 페이더 슬롯(FADERS_PER_PAGE 배수 = 페이지×10). 페이지 무관하게 모두 출력에 기여 */
   faderSlots: FaderSlot[];
+  /** 현재 보이는 플레이백 페이지(0-based). FaderStrip은 이 페이지의 10칸만 표시 */
+  faderPage: number;
   /** 그랜드 마스터 0..1 */
   grandMaster: number;
   /** 블랙아웃(전체 출력 ×0) */
@@ -255,6 +261,12 @@ interface SceneState {
   assignFader: (slotIndex: number, assignment: FaderAssignment | null) => void;
   setFaderLevel: (slotIndex: number, level: number) => void;
   setFlashHeld: (slotIndex: number, held: boolean) => void;
+  /** 보이는 플레이백 페이지 전환(0-based, 범위 밖은 클램프) */
+  setFaderPage: (page: number) => void;
+  /** 페이지 추가(빈 슬롯 10칸) 후 그 페이지로 이동 */
+  addFaderPage: () => void;
+  /** 마지막 페이지 삭제 — 그 페이지가 비어 있고 2페이지 이상일 때만 */
+  removeFaderPage: () => void;
   setGrandMaster: (level: number) => void;
   toggleBlackout: () => void;
   /** 블랙아웃을 특정 값으로 설정 (조명 녹화 재생 시 사용) */
@@ -681,7 +693,9 @@ function coerceFaderSlots(
   const validLookIds = new Set(looks.map((l) => l.id));
   const validEffectIds = new Set(effects.map((e) => e.id));
   const arr = Array.isArray(raw) ? raw : [];
-  return Array.from({ length: FADER_SLOT_COUNT }, (_, i) => {
+  // 저장된 슬롯 수를 페이지 배수(최소 1페이지)로 올림 — 여러 페이지 복원
+  const total = Math.max(FADERS_PER_PAGE, Math.ceil(arr.length / FADERS_PER_PAGE) * FADERS_PER_PAGE);
+  return Array.from({ length: total }, (_, i) => {
     const o = arr[i];
     let assignment: FaderAssignment | null = null;
     let level = 0;
@@ -808,6 +822,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   groups: [],
   looks: [],
   faderSlots: defaultFaderSlots(),
+  faderPage: 0,
   grandMaster: 1,
   blackout: false,
   effects: [],
@@ -892,6 +907,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           assignment: sl.assignment,
           level: sl.level,
         })),
+        faderPage: s.faderPage,
         bpm: s.bpm,
         effects: s.effects.map((e) => ({ ...e })),
         customColors: [...s.customColors],
@@ -963,6 +979,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     const looks = coerceLooks(d.console?.looks, fixtures);
     const effects = coerceEffects(d.console?.effects, groups, fixtures);
     const faderSlots = coerceFaderSlots(d.console?.faderSlots, groups, looks, effects);
+    const pageCount = faderSlots.length / FADERS_PER_PAGE;
+    const faderPage = Math.max(0, Math.min(pageCount - 1, Math.floor(num(d.console?.faderPage, 0))));
     const grandMaster = clamp01(num(d.console?.grandMaster, 1));
     const bpm = clamp(num(d.console?.bpm, DEFAULT_BPM), 20, 400);
     const customColors = Array.isArray(d.console?.customColors)
@@ -993,6 +1011,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       groups,
       looks,
       faderSlots,
+      faderPage,
       grandMaster,
       blackout: false,
       effects,
@@ -1403,8 +1422,13 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         fadeMs: DEFAULT_LOOK_FADE_MS,
         effects: cap.snapshots.length ? cap.snapshots : undefined,
       };
-      // D-9: 빈 슬롯이 있으면 자동 할당
-      const emptyIdx = s.faderSlots.findIndex((sl) => sl.assignment === null);
+      // D-9: 빈 슬롯이 있으면 자동 할당 — 현재 페이지의 빈 칸을 우선, 없으면 전체 첫 빈 칸
+      const base = s.faderPage * FADERS_PER_PAGE;
+      const localEmpty = s.faderSlots
+        .slice(base, base + FADERS_PER_PAGE)
+        .findIndex((sl) => sl.assignment === null);
+      const emptyIdx =
+        localEmpty >= 0 ? base + localEmpty : s.faderSlots.findIndex((sl) => sl.assignment === null);
       const faderSlots =
         emptyIdx >= 0
           ? s.faderSlots.map((sl, i) =>
@@ -1613,6 +1637,35 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
     const as = useAudioStore.getState();
     if (as.recording) as.recordEvent({ kind: "flash", slot: slotIndex, held });
   },
+
+  // ─── 콘솔: 플레이백 페이지 (구조 변경 — 라이브, undo 미기록) ───
+  setFaderPage: (page) =>
+    set((s) => {
+      const pages = Math.max(1, s.faderSlots.length / FADERS_PER_PAGE);
+      return { faderPage: Math.max(0, Math.min(pages - 1, Math.floor(page))) };
+    }),
+
+  addFaderPage: () =>
+    set((s) => {
+      const added: FaderSlot[] = Array.from({ length: FADERS_PER_PAGE }, () => ({
+        assignment: null,
+        level: 0,
+        flashHeld: false,
+      }));
+      const faderSlots = [...s.faderSlots, ...added];
+      return { faderSlots, faderPage: faderSlots.length / FADERS_PER_PAGE - 1 }; // 새 페이지로 이동
+    }),
+
+  removeFaderPage: () =>
+    set((s) => {
+      const pages = s.faderSlots.length / FADERS_PER_PAGE;
+      if (pages <= 1) return {}; // 최소 1페이지 유지
+      const start = (pages - 1) * FADERS_PER_PAGE;
+      // 마지막 페이지만 삭제(하위 인덱스 안정) · 사용 중이면 거부
+      if (s.faderSlots.slice(start).some((sl) => sl.assignment !== null)) return {};
+      const faderSlots = s.faderSlots.slice(0, start);
+      return { faderSlots, faderPage: Math.min(s.faderPage, pages - 2) };
+    }),
 
   setGrandMaster: (level) => {
     set({ grandMaster: clamp01(level) });

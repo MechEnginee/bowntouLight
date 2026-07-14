@@ -29,7 +29,7 @@ export interface LightingEvent {
 
 /** 녹화 시작 시점의 콘솔 라이브 상태 — 재생/탐색 시 여기서부터 이벤트를 재적용 */
 export interface RecordingBaseline {
-  faderLevels: number[]; // 길이 10
+  faderLevels: number[]; // 전체 페이더 슬롯 수만큼(페이지×10) · 부족분은 재생 시 0
   grandMaster: number;
   blackout: boolean;
   bpm?: number; // 녹화 시점 BPM(D-8) — 재생 시 셰이프 속도 복원. 옵셔널(구버전 호환)

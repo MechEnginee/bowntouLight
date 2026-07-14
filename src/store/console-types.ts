@@ -55,7 +55,10 @@ export interface FaderSlot {
   flashHeld: boolean;
 }
 
-export const FADER_SLOT_COUNT = 10;
+/** 한 플레이백 페이지당 페이더 수. faderSlots는 이 배수로 늘어난다(페이지 관리). */
+export const FADERS_PER_PAGE = 10;
+/** 초기 슬롯 수 = 1페이지 (하위호환 별칭) */
+export const FADER_SLOT_COUNT = FADERS_PER_PAGE;
 export const DEFAULT_LOOK_FADE_MS = 2000; // D-2
 
 // ─── 셰이프/이펙트 제너레이터 ───
