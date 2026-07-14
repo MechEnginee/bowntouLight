@@ -15,6 +15,9 @@ const GROUP_LABEL: Record<FixtureType, string> = {
   bar: "트러스 바 (Truss)",
   wall: "반사 벽 (Wall)",
   floor: "반사 바닥 (Floor)",
+  cube: "큐브 (Cube)",
+  cylinder: "원통 (Cylinder)",
+  sphere: "구 (Sphere)",
 };
 
 const TYPE_ORDER: FixtureType[] = [
@@ -26,10 +29,13 @@ const TYPE_ORDER: FixtureType[] = [
   "bar",
   "wall",
   "floor",
+  "cube",
+  "cylinder",
+  "sphere",
 ];
 
 /** 목록에서 바로 새 오브젝트를 추가할 수 있는 타입 */
-const ADDABLE: FixtureType[] = ["light", "bar", "wall", "floor"];
+const ADDABLE: FixtureType[] = ["light", "bar", "wall", "floor", "cube", "cylinder", "sphere"];
 
 export function FixtureList({ width = 260 }: { width?: number }) {
   const fixtures = useSceneStore((s) => s.fixtures);

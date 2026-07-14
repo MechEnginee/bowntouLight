@@ -172,15 +172,21 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
   const allPar = selected.every((f) => f.type === "par");
   const allMoving = selected.every((f) => f.type === "movingHead");
   const isStrobe = selected.every((f) => f.type === "strobe");
-  // 트러스 바는 구조물 — 프레임색만 있고 밝기/On·Off 없음
+  const PRIMITIVES = ["cube", "cylinder", "sphere"];
+  const isPrim = (t: string) => PRIMITIVES.includes(t);
+  // 구조물(벽/바닥/트러스/기본도형) — 색만 있고 밝기/On·Off 없음
   const isStructural = selected.every(
-    (f) => f.type === "wall" || f.type === "floor" || f.type === "bar",
+    (f) => f.type === "wall" || f.type === "floor" || f.type === "bar" || isPrim(f.type),
   );
   const isSurface = selected.every(
     (f) => f.type === "wall" || f.type === "floor",
   );
+  // 이미지를 입힐 수 있는 표면류: 벽/바닥/기본도형
+  const isImageable = selected.every(
+    (f) => f.type === "wall" || f.type === "floor" || isPrim(f.type),
+  );
   const isLight = selected.every((f) => f.type === "light");
-  // 색을 가진 오브젝트: 빔(무빙/미니빔)·스트로브·광원·트러스 바·벽/바닥
+  // 색을 가진 오브젝트: 빔(무빙/미니빔)·스트로브·광원·트러스 바·벽/바닥·기본도형
   const hasColor = selected.every(
     (f) =>
       f.type === "movingHead" ||
@@ -189,16 +195,18 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
       f.type === "wall" ||
       f.type === "floor" ||
       f.type === "light" ||
-      f.type === "bar",
+      f.type === "bar" ||
+      isPrim(f.type),
   );
-  // 벽·바닥·광원·트러스 바는 RGB 입력
+  // 구조물·광원은 RGB/팔레트 입력
   const useRgbColor = isStructural || isLight;
   const hasDimmer = selected.every(
     (f) =>
       f.type !== "hazer" &&
       f.type !== "wall" &&
       f.type !== "floor" &&
-      f.type !== "bar",
+      f.type !== "bar" &&
+      !isPrim(f.type),
   );
   const allOn = selected.every((f) => f.on);
   const multi = selected.length > 1;
@@ -312,9 +320,11 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
               ? "표면색 (RGB)"
               : isLight
                 ? "광원색 (RGB)"
-                : isStructural
-                  ? "프레임색 (RGB)"
-                  : "색상 (Color)"}
+                : selected.every((f) => isPrim(f.type))
+                  ? "도형색 (RGB)"
+                  : isStructural
+                    ? "프레임색 (RGB)"
+                    : "색상 (Color)"}
           </div>
           {useRgbColor ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -357,25 +367,26 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
         </div>
       )}
 
-      {isSurface && (
-        <>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: "#b0b0c0", marginBottom: 6 }}>표면 이미지</div>
-            <ImagePicker
-              value={primary.imageUrl ?? null}
-              onChange={(url) => setFixtureImage(selectedIds, url)}
-              label="이미지"
-            />
-            <div style={{ fontSize: 10.5, color: "#666", marginTop: 5, lineHeight: 1.5 }}>
-              이미지를 넣으면 표면색 대신 이미지가 벽/바닥에 입혀집니다.
-            </div>
+      {isImageable && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: "#b0b0c0", marginBottom: 6 }}>표면 이미지</div>
+          <ImagePicker
+            value={primary.imageUrl ?? null}
+            onChange={(url) => setFixtureImage(selectedIds, url)}
+            label="이미지"
+          />
+          <div style={{ fontSize: 10.5, color: "#666", marginTop: 5, lineHeight: 1.5 }}>
+            이미지를 넣으면 색 대신 이미지가 표면에 입혀집니다.
           </div>
-          <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 10 }}>
-            벽/바닥은 목록에서 선택 후 기즈모로
-            <br />
-            이동(1)·회전(2)·크기(3) 조절합니다.
-          </div>
-        </>
+        </div>
+      )}
+
+      {(isSurface || selected.every((f) => isPrim(f.type))) && (
+        <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 10 }}>
+          목록에서 선택 후 기즈모로
+          <br />
+          이동(1)·회전(2)·크기(3) 조절합니다.
+        </div>
       )}
 
       {/* Position/Rotation/Scale — 기즈모(1/2/3)와 동일한 값을 숫자로 직접 입력/수정 */}

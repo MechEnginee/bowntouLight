@@ -9,7 +9,7 @@
 // 대신 group.userData.fixtureId 로 표시해 두면 App이 클릭(작은 드래그) 시 직접 선택한다.
 
 import { useSceneStore, selectEffectiveDimmer } from "../../store/scene-store";
-import { SURFACE_SIZE } from "../../config/fixtures.config";
+import { SURFACE_SIZE, PRIMITIVE_BOX } from "../../config/fixtures.config";
 import { MovingHead } from "./MovingHead";
 import { MiniBeam } from "./MiniBeam";
 import { StrobeLight } from "./StrobeLight";
@@ -17,6 +17,7 @@ import { Hazer } from "./Hazer";
 import { Surface } from "./Surface";
 import { SceneLight } from "./SceneLight";
 import { Bar, BAR_WIDTH, BAR_HEIGHT } from "./Bar";
+import { Primitive } from "./Primitive";
 
 export function MovableFixture({ id }: { id: string }) {
   const f = useSceneStore((s) => s.fixtures[id]);
@@ -86,10 +87,16 @@ export function MovableFixture({ id }: { id: string }) {
     case "bar":
       visual = <Bar color={f.color} />;
       break;
+    case "cube":
+    case "cylinder":
+    case "sphere":
+      visual = <Primitive kind={f.type} color={f.color} imageUrl={f.imageUrl} />;
+      break;
   }
 
   // 선택 표시 크기: 표면/트러스는 구조 크기에 맞춘 박스, 그 외는 0.7m 큐브
   const isSurface = f.type === "wall" || f.type === "floor";
+  const isPrimitive = f.type === "cube" || f.type === "cylinder" || f.type === "sphere";
   const indicatorArgs: [number, number, number] = isSurface
     ? [
         SURFACE_SIZE[f.type as "wall" | "floor"][0] + 0.3,
@@ -98,7 +105,9 @@ export function MovableFixture({ id }: { id: string }) {
       ]
     : f.type === "bar"
       ? [BAR_WIDTH + 0.5, BAR_HEIGHT + 0.5, 0.5]
-      : [0.7, 0.7, 0.7];
+      : isPrimitive
+        ? (PRIMITIVE_BOX[f.type as "cube" | "cylinder" | "sphere"].map((v) => v + 0.2) as [number, number, number])
+        : [0.7, 0.7, 0.7];
 
   // 표면은 group에 포인터 핸들러를 달지 않는다(마퀴 드래그 보호). App이 userData로 클릭 선택.
   const handlers = isSurface

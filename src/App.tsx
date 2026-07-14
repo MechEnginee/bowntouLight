@@ -20,7 +20,7 @@ import { ConsolePanel } from "./components/ui/ConsolePanel";
 import { AudioTimeline } from "./components/ui/audio/AudioTimeline";
 import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { BAR_WIDTH, BAR_HEIGHT } from "./components/fixtures/Bar";
-import { SURFACE_SIZE } from "./config/fixtures.config";
+import { SURFACE_SIZE, PRIMITIVE_BOX } from "./config/fixtures.config";
 import { useSceneStore, type FixtureRuntime } from "./store/scene-store";
 import { useImageTexture } from "./components/useImageTexture";
 
@@ -31,6 +31,7 @@ function fixtureBoxSize(f: FixtureRuntime): [number, number, number] {
     return [w, h, 0.25];
   }
   if (f.type === "bar") return [BAR_WIDTH, BAR_HEIGHT, 0.5];
+  if (f.type === "cube" || f.type === "cylinder" || f.type === "sphere") return PRIMITIVE_BOX[f.type];
   return [0.7, 0.7, 0.7];
 }
 

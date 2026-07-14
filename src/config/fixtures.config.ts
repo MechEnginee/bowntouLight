@@ -11,7 +11,20 @@ export type FixtureType =
   | "wall"
   | "floor"
   | "light"
-  | "bar";
+  | "bar"
+  | "cube"
+  | "cylinder"
+  | "sphere";
+
+/** 사용자가 추가할 수 있는 기본 도형 */
+export type PrimitiveType = "cube" | "cylinder" | "sphere";
+
+/** 기본 도형의 로컬 바운딩 박스 [w,h,d] (런타임 scale을 곱하기 전) — 선택/픽킹 판정에 사용 */
+export const PRIMITIVE_BOX: Record<PrimitiveType, [number, number, number]> = {
+  cube: [1, 1, 1],
+  cylinder: [1, 1.5, 1],
+  sphere: [1.2, 1.2, 1.2],
+};
 
 export interface FixtureConfig {
   id: string;
