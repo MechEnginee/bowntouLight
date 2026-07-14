@@ -328,6 +328,9 @@ const DEFAULT_COLOR: Partial<Record<FixtureType, string>> = {
   wall: "#0d0d12",
   floor: "#151515",
   bar: "#3a3a3a", // 트러스 프레임 금속색
+  cube: "#8a8a92",
+  cylinder: "#8a8a92",
+  sphere: "#8a8a92",
 };
 
 const defaultAngle = (t: FixtureType) => (t === "par" ? 4 : 25);
@@ -371,6 +374,9 @@ const ID_PREFIX: Record<FixtureType, string> = {
   floor: "floor",
   light: "light",
   bar: "bar",
+  cube: "cube",
+  cylinder: "cylinder",
+  sphere: "sphere",
 };
 
 /** 타입 접두어 기준으로 다음 표시 이름 생성 (예: moving-9) — 기존 name들과 겹치지 않게 */
@@ -477,6 +483,10 @@ function defaultObject(type: FixtureType, id: string, name: string): FixtureRunt
   if (type === "wall") {
     base.position = [0, 4, 0];
     base.scale = [0.5, 1, 1];
+  }
+  if (type === "cube" || type === "cylinder" || type === "sphere") {
+    // 기본 도형: 바닥 근처에 두어 바로 보이게 (중심 y≈0.9)
+    base.position = [0, 0.9, 0];
   }
   if (type === "hazer") base.position = [0, 0.5, 0];
   if (type === "light") {
