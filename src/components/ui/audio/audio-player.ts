@@ -4,10 +4,16 @@
 
 let el: HTMLAudioElement | null = null;
 let objectUrl: string | null = null;
+let loadedFile: File | null = null;
 
 function ensure(): HTMLAudioElement {
   if (!el) el = new Audio();
   return el;
+}
+
+/** 현재 로드된 원본 오디오 파일(ZIP 번들 내보내기용). 없으면 null */
+export function getLoadedAudioFile(): File | null {
+  return loadedFile;
 }
 
 /** 파일을 오디오 요소에 로드하고 메타데이터(길이) 준비까지 대기 */
@@ -15,6 +21,7 @@ export function loadAudioFile(file: File): Promise<number> {
   const a = ensure();
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = URL.createObjectURL(file);
+  loadedFile = file;
   a.src = objectUrl;
   a.load();
   return new Promise((resolve, reject) => {
