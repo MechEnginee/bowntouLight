@@ -10,6 +10,7 @@ import { RgbRow } from "./RgbRow";
 import { ColorPalette } from "./ColorPalette";
 import { ImagePicker } from "./ImagePicker";
 import { rgbToHex, hexToRgb } from "./color-utils";
+import { buildSceneZip, importSceneZip } from "./scene-bundle";
 
 /** {SceneName}_YYYYMMDDHHMMSS.btw 파일명 */
 function exportFileName(name: string): string {
@@ -79,10 +80,36 @@ export function ScenePanel() {
     a.click();
     URL.revokeObjectURL(url);
   };
+  // ZIP 번들 내보내기 — .btw + img/ + sound/
+  const [zipBusy, setZipBusy] = useState(false);
+  const handleExportZip = async () => {
+    setZipBusy(true);
+    try {
+      const { blob, name } = await buildSceneZip();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("ZIP 내보내기에 실패했습니다.");
+    } finally {
+      setZipBusy(false);
+    }
+  };
+
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    // .zip은 번들 임포터로, 그 외(.btw/JSON)는 기존 텍스트 임포터로
+    if (/\.zip$/i.test(file.name)) {
+      importSceneZip(file).then((res) => {
+        if (!res.ok) alert(`불러오기 실패: ${res.error}`);
+      });
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -187,6 +214,24 @@ export function ScenePanel() {
               내보내기
             </button>
             <button
+              onClick={handleExportZip}
+              disabled={zipBusy}
+              title="소스(이미지·음원)와 .btw를 ZIP으로 묶어 내보내기"
+              style={{
+                flex: 1,
+                padding: "5px",
+                borderRadius: 4,
+                border: "1px solid #3a5a3a",
+                background: "#1a2a1a",
+                color: "#9ad09a",
+                cursor: zipBusy ? "default" : "pointer",
+                opacity: zipBusy ? 0.6 : 1,
+                fontSize: 11,
+              }}
+            >
+              {zipBusy ? "ZIP…" : "ZIP"}
+            </button>
+            <button
               onClick={() => fileInputRef.current?.click()}
               style={{
                 flex: 1,
@@ -204,7 +249,7 @@ export function ScenePanel() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".btw,application/json,.json"
+              accept=".btw,application/json,.json,.zip"
               onChange={handleImportFile}
               style={{ display: "none" }}
             />
