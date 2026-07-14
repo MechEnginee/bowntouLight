@@ -7,6 +7,9 @@ import { useEffect, useRef, useState } from "react";
 import { useSceneStore } from "../../store/scene-store";
 import { NumberField } from "./NumberField";
 import { RgbRow } from "./RgbRow";
+import { ColorPalette } from "./ColorPalette";
+import { ImagePicker } from "./ImagePicker";
+import { rgbToHex, hexToRgb } from "./color-utils";
 
 /** {SceneName}_YYYYMMDDHHMMSS.btw 파일명 */
 function exportFileName(name: string): string {
@@ -28,6 +31,12 @@ export function ScenePanel() {
   const setLightPosition = useSceneStore((s) => s.setLightPosition);
   const backgroundColor = useSceneStore((s) => s.backgroundColor);
   const setBackgroundChannel = useSceneStore((s) => s.setBackgroundChannel);
+  const backgroundImage = useSceneStore((s) => s.backgroundImage);
+  const setBackgroundImage = useSceneStore((s) => s.setBackgroundImage);
+  const beamGlow = useSceneStore((s) => s.beamGlow);
+  const setBeamGlow = useSceneStore((s) => s.setBeamGlow);
+  const showGrid = useSceneStore((s) => s.showGrid);
+  const setShowGrid = useSceneStore((s) => s.setShowGrid);
 
   const [pos, setPos] = useState({ x: 12, y: 52 }); // 좌상단 3D 뷰 컨트롤 버튼 아래로
   const [collapsed, setCollapsed] = useState(false);
@@ -231,6 +240,69 @@ export function ScenePanel() {
             style={{ width: "100%", accentColor: "#4A90D9" }}
           />
 
+          {/* 빔 글로우 — 반짝이는 볼류메트릭 빛 세기 */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 8,
+              marginBottom: 5,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>빔 글로우</span>
+            <NumberField
+              value={beamGlow * 100}
+              onCommit={(v) => setBeamGlow(Math.max(0, Math.min(200, v)) / 100)}
+              suffix="%"
+              decimals={0}
+              width={48}
+              align="right"
+            />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={200}
+            value={beamGlow * 100}
+            onChange={(e) => setBeamGlow(parseFloat(e.target.value) / 100)}
+            style={{ width: "100%", accentColor: "#4A90D9" }}
+          />
+          <div style={{ fontSize: 10.5, color: "#666", marginTop: 3, lineHeight: 1.5 }}>
+            빔의 반짝이는 발광 세기 (0%=글로우 끄기)
+          </div>
+
+          {/* 격자 그리드 표시 토글 */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>격자 그리드</span>
+            <button
+              onClick={() => setShowGrid(!showGrid)}
+              style={{
+                border: "1px solid #3a5a8c",
+                borderRadius: 4,
+                padding: "3px 12px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                background: showGrid ? "#3f6bb0" : "#2a2a32",
+                color: showGrid ? "#fff" : "#9a9aa6",
+              }}
+            >
+              {showGrid ? "표시" : "숨김"}
+            </button>
+          </div>
+
           {/* 태양광 위치 */}
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #2a2a40" }}>
             <div style={labelStyle}>태양광 위치 (Sun)</div>
@@ -251,14 +323,24 @@ export function ScenePanel() {
             </div>
           </div>
 
-          {/* 배경색 */}
+          {/* 배경색 — 팔레트에서 고르거나 RGB로 직접 입력 */}
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #2a2a40" }}>
-            <div style={labelStyle}>배경색 (RGB)</div>
+            <div style={labelStyle}>배경색</div>
+            <ColorPalette
+              value={rgbToHex(backgroundColor)}
+              onPick={(hex) => hexToRgb(hex).forEach((v, i) => setBackgroundChannel(i as 0 | 1 | 2, v))}
+            />
+            <div style={{ ...labelStyle, marginTop: 8 }}>RGB 직접 입력</div>
             <RgbRow
               value={backgroundColor}
               onChange={(ch, v) => setBackgroundChannel(ch, v)}
               onPickAll={(rgb) => rgb.forEach((v, i) => setBackgroundChannel(i as 0 | 1 | 2, v))}
             />
+            <div style={{ ...labelStyle, marginTop: 10 }}>배경 이미지</div>
+            <ImagePicker value={backgroundImage} onChange={setBackgroundImage} label="배경" />
+            <div style={{ fontSize: 10.5, color: "#666", marginTop: 5, lineHeight: 1.5 }}>
+              구름 등 이미지를 넣으면 배경색 대신 배경으로 표시됩니다.
+            </div>
           </div>
         </div>
       )}

@@ -22,6 +22,7 @@ import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { BAR_WIDTH, BAR_HEIGHT } from "./components/fixtures/Bar";
 import { SURFACE_SIZE } from "./config/fixtures.config";
 import { useSceneStore, type FixtureRuntime } from "./store/scene-store";
+import { useImageTexture } from "./components/useImageTexture";
 
 /** 선택 판정용 로컬 바운딩 박스 크기 [w,h,d] — MovableFixture의 선택 표시 박스와 동일 */
 function fixtureBoxSize(f: FixtureRuntime): [number, number, number] {
@@ -59,10 +60,29 @@ function SceneLights() {
   );
 }
 
-/** Scene 배경색 — 스토어 backgroundColor(RGB)에 연동. */
+/** Scene 배경 — 이미지가 있으면 이미지, 없으면 배경색(RGB). */
 function SceneBackground() {
   const [r, g, b] = useSceneStore((s) => s.backgroundColor);
+  const bgImage = useSceneStore((s) => s.backgroundImage);
+  const tex = useImageTexture(bgImage);
+  if (bgImage && tex) return <primitive attach="background" object={tex} />;
   return <color attach="background" args={[r / 255, g / 255, b / 255]} />;
+}
+
+/** 바닥 격자 그리드 — 스토어 showGrid로 표시 토글. */
+function SceneGrid() {
+  const showGrid = useSceneStore((s) => s.showGrid);
+  if (!showGrid) return null;
+  return (
+    <Grid
+      args={[20, 20]}
+      cellColor="#222"
+      sectionColor="#4A90D9"
+      sectionThickness={1}
+      fadeDistance={30}
+      position={[0, 0.01, 0]}
+    />
+  );
 }
 
 /** 개발자 통계 프로브 — Canvas 내부에서 FPS·총 폴리곤 수를 0.25초마다 샘플링해 콜백.
@@ -431,14 +451,7 @@ export default function App() {
           <FixtureGroup />
           <SelectionControls tcRef={tcRef} />
 
-          <Grid
-            args={[20, 20]}
-            cellColor="#222"
-            sectionColor="#4A90D9"
-            sectionThickness={1}
-            fadeDistance={30}
-            position={[0, 0.01, 0]}
-          />
+          <SceneGrid />
 
           <OrbitControls
             makeDefault

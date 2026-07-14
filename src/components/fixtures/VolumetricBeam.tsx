@@ -138,6 +138,7 @@ export function VolumetricBeam({
 }: Props) {
   const lightRef = useRef<THREE.SpotLight>(null);
   const target = useMemo(() => new THREE.Object3D(), []);
+  const beamGlow = useSceneStore((s) => s.beamGlow);
 
   useEffect(() => {
     if (lightRef.current) lightRef.current.target = target;
@@ -279,9 +280,10 @@ export function VolumetricBeam({
   }, [angle, pan, tilt, position, headOffsetY, lx, ly, lz, lensRadius, rayQuat, rrx, rry, rrz, rootS, surfaces]);
 
   // ─── 밝기: 에너지 보존 — 넓게 퍼질수록 어두워진다 ───
+  // beamGlow(전역): 반짝이는 볼류메트릭 글로우 세기 배율(클램프 후 곱해 1 이상도 허용)
   const energy = energyScale(energyAngle ?? angle, refAngle);
-  const beamIntensity = Math.min(1.6, 1.1 * dimmer * energy * intensityScale);
-  const spotIntensity = Math.min(1.3, 0.9 * dimmer * energy * intensityScale);
+  const beamIntensity = Math.min(1.6, 1.1 * dimmer * energy * intensityScale) * beamGlow;
+  const spotIntensity = Math.min(1.3, 0.9 * dimmer * energy * intensityScale) * beamGlow;
 
   beamMat.uniforms.uColor.value.set(color);
   beamMat.uniforms.uIntensity.value = beamIntensity;
