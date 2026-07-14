@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { useSceneStore } from "../../../store/scene-store";
 import type { FaderSlot } from "../../../store/console-types";
+import { FADERS_PER_PAGE } from "../../../store/console-types";
 import { Fader } from "./Fader";
 
 // 페이더 높이는 CSS flex로 자동 스케일한다(측정 불필요) — 컬럼을 채우고 남는 세로 공간을
@@ -74,10 +75,12 @@ function FlashButton({ index, slot, assigned }: { index: number; slot: FaderSlot
 
 function FaderSlotColumn({
   index,
+  displayNum,
   slot,
   legend,
 }: {
   index: number;
+  displayNum: number;
   slot: FaderSlot;
   legend: { text: string; color?: string } | null;
 }) {
@@ -98,8 +101,8 @@ function FaderSlotColumn({
         disabled={!assigned}
         accent={accent}
       />
-      {/* 슬롯 번호 (실기기 프린트) */}
-      <div style={{ fontSize: 9, fontWeight: 700, color: "#4a4a52" }}>{index + 1}</div>
+      {/* 슬롯 번호 (실기기 프린트 — 페이지 내 1..10) */}
+      <div style={{ fontSize: 9, fontWeight: 700, color: "#4a4a52" }}>{displayNum}</div>
       {/* legend 테이프 (실기기 라벨 테이프 느낌) */}
       <div
         style={{
@@ -211,25 +214,71 @@ function BpmControl() {
 
 export function FaderStrip() {
   const faderSlots = useSceneStore((s) => s.faderSlots);
+  const faderPage = useSceneStore((s) => s.faderPage);
   const grandMaster = useSceneStore((s) => s.grandMaster);
   const blackout = useSceneStore((s) => s.blackout);
   const groups = useSceneStore((s) => s.groups);
   const looks = useSceneStore((s) => s.looks);
   const effects = useSceneStore((s) => s.effects);
 
+  const pageCount = Math.max(1, faderSlots.length / FADERS_PER_PAGE);
+  const page = Math.min(faderPage, pageCount - 1);
+  const base = page * FADERS_PER_PAGE;
+  const pageSlots = faderSlots.slice(base, base + FADERS_PER_PAGE);
+  // 마지막 페이지가 비어 있고 2페이지 이상이면 삭제 가능
+  const lastPageEmpty = pageCount > 1 && faderSlots.slice((pageCount - 1) * FADERS_PER_PAGE).every((sl) => !sl.assignment);
+
   return (
     <div
       style={{ display: "flex", alignItems: "stretch", gap: 12, padding: "8px 14px 12px", height: "100%", boxSizing: "border-box", minHeight: 0 }}
     >
-      {/* Playback Page -/+ (비활성, 실기기 재현) */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
-        <div style={{ fontSize: 9, color: "#5a5a62", fontWeight: 600, marginBottom: 2 }}>Page</div>
-        <button disabled style={pageBtnStyle} title="플레이백 페이지 (추후 개발)">
-          −
-        </button>
-        <button disabled style={pageBtnStyle} title="플레이백 페이지 (추후 개발)">
-          +
-        </button>
+      {/* Playback Page 관리 — 페이지 전환/추가/삭제 */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 3 }}>
+        <div style={{ fontSize: 9, color: "#5a5a62", fontWeight: 600 }}>Page</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#2a2a30", fontVariantNumeric: "tabular-nums" }}>
+          {page + 1} / {pageCount}
+        </div>
+        <div style={{ display: "flex", gap: 3 }}>
+          <button
+            onClick={() => useSceneStore.getState().setFaderPage(page - 1)}
+            disabled={page <= 0}
+            style={pageBtnStyle(page <= 0)}
+            title="이전 페이지"
+          >
+            ◀
+          </button>
+          <button
+            onClick={() => useSceneStore.getState().setFaderPage(page + 1)}
+            disabled={page >= pageCount - 1}
+            style={pageBtnStyle(page >= pageCount - 1)}
+            title="다음 페이지"
+          >
+            ▶
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 3 }}>
+          <button
+            onClick={() => useSceneStore.getState().addFaderPage()}
+            style={pageBtnStyle(false)}
+            title="페이지 추가 (빈 페이더 10칸)"
+          >
+            ＋
+          </button>
+          <button
+            onClick={() => useSceneStore.getState().removeFaderPage()}
+            disabled={!lastPageEmpty}
+            style={pageBtnStyle(!lastPageEmpty)}
+            title={
+              pageCount <= 1
+                ? "페이지가 하나뿐입니다"
+                : lastPageEmpty
+                  ? "마지막(빈) 페이지 삭제"
+                  : "마지막 페이지가 사용 중이라 삭제할 수 없습니다"
+            }
+          >
+            🗑
+          </button>
+        </div>
       </div>
 
       {/* BO */}
@@ -280,23 +329,35 @@ export function FaderStrip() {
 
       <div style={{ width: 2, alignSelf: "stretch", background: "#a0a0a6", margin: "0 4px", borderRadius: 2 }} />
 
-      {/* 슬롯 1~10 */}
+      {/* 현재 페이지의 슬롯 1~10 (전역 인덱스 = base+i) */}
       <div style={{ display: "flex", gap: 6, flex: 1, justifyContent: "space-between", alignItems: "stretch", minHeight: 0 }}>
-        {faderSlots.map((slot, i) => (
-          <FaderSlotColumn key={i} index={i} slot={slot} legend={legendFor(slot, groups, looks, effects)} />
+        {pageSlots.map((slot, i) => (
+          <FaderSlotColumn
+            key={base + i}
+            index={base + i}
+            displayNum={i + 1}
+            slot={slot}
+            legend={legendFor(slot, groups, looks, effects)}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-const pageBtnStyle: React.CSSProperties = {
-  width: 34,
-  height: 20,
-  borderRadius: 3,
-  background: "linear-gradient(180deg, #e8e8ec, #cfcfd4)",
-  border: "1px solid #a0a0a6",
-  color: "#8a8a90",
-  fontSize: 13,
-  cursor: "not-allowed",
-};
+function pageBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    width: 24,
+    height: 20,
+    borderRadius: 3,
+    background: disabled
+      ? "linear-gradient(180deg, #dcdce0, #c6c6cc)"
+      : "linear-gradient(180deg, #f0f0f4, #d6d6dc)",
+    border: "1px solid #a0a0a6",
+    color: disabled ? "#a8a8ae" : "#3a3a42",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: disabled ? "not-allowed" : "pointer",
+    padding: 0,
+  };
+}
