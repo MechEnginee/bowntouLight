@@ -7,6 +7,9 @@ import { useEffect, useRef, useState } from "react";
 import { useSceneStore } from "../../store/scene-store";
 import { NumberField } from "./NumberField";
 import { RgbRow } from "./RgbRow";
+import { ColorPalette } from "./ColorPalette";
+import { ImagePicker } from "./ImagePicker";
+import { rgbToHex, hexToRgb } from "./color-utils";
 
 /** {SceneName}_YYYYMMDDHHMMSS.btw 파일명 */
 function exportFileName(name: string): string {
@@ -28,6 +31,8 @@ export function ScenePanel() {
   const setLightPosition = useSceneStore((s) => s.setLightPosition);
   const backgroundColor = useSceneStore((s) => s.backgroundColor);
   const setBackgroundChannel = useSceneStore((s) => s.setBackgroundChannel);
+  const backgroundImage = useSceneStore((s) => s.backgroundImage);
+  const setBackgroundImage = useSceneStore((s) => s.setBackgroundImage);
 
   const [pos, setPos] = useState({ x: 12, y: 52 }); // 좌상단 3D 뷰 컨트롤 버튼 아래로
   const [collapsed, setCollapsed] = useState(false);
@@ -251,14 +256,24 @@ export function ScenePanel() {
             </div>
           </div>
 
-          {/* 배경색 */}
+          {/* 배경색 — 팔레트에서 고르거나 RGB로 직접 입력 */}
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #2a2a40" }}>
-            <div style={labelStyle}>배경색 (RGB)</div>
+            <div style={labelStyle}>배경색</div>
+            <ColorPalette
+              value={rgbToHex(backgroundColor)}
+              onPick={(hex) => hexToRgb(hex).forEach((v, i) => setBackgroundChannel(i as 0 | 1 | 2, v))}
+            />
+            <div style={{ ...labelStyle, marginTop: 8 }}>RGB 직접 입력</div>
             <RgbRow
               value={backgroundColor}
               onChange={(ch, v) => setBackgroundChannel(ch, v)}
               onPickAll={(rgb) => rgb.forEach((v, i) => setBackgroundChannel(i as 0 | 1 | 2, v))}
             />
+            <div style={{ ...labelStyle, marginTop: 10 }}>배경 이미지</div>
+            <ImagePicker value={backgroundImage} onChange={setBackgroundImage} label="배경" />
+            <div style={{ fontSize: 10.5, color: "#666", marginTop: 5, lineHeight: 1.5 }}>
+              구름 등 이미지를 넣으면 배경색 대신 배경으로 표시됩니다.
+            </div>
           </div>
         </div>
       )}

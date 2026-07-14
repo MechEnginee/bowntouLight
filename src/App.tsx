@@ -22,6 +22,7 @@ import { ResizeHandle } from "./components/ui/ResizeHandle";
 import { BAR_WIDTH, BAR_HEIGHT } from "./components/fixtures/Bar";
 import { SURFACE_SIZE } from "./config/fixtures.config";
 import { useSceneStore, type FixtureRuntime } from "./store/scene-store";
+import { useImageTexture } from "./components/useImageTexture";
 
 /** 선택 판정용 로컬 바운딩 박스 크기 [w,h,d] — MovableFixture의 선택 표시 박스와 동일 */
 function fixtureBoxSize(f: FixtureRuntime): [number, number, number] {
@@ -59,9 +60,12 @@ function SceneLights() {
   );
 }
 
-/** Scene 배경색 — 스토어 backgroundColor(RGB)에 연동. */
+/** Scene 배경 — 이미지가 있으면 이미지, 없으면 배경색(RGB). */
 function SceneBackground() {
   const [r, g, b] = useSceneStore((s) => s.backgroundColor);
+  const bgImage = useSceneStore((s) => s.backgroundImage);
+  const tex = useImageTexture(bgImage);
+  if (bgImage && tex) return <primitive attach="background" object={tex} />;
   return <color attach="background" args={[r / 255, g / 255, b / 255]} />;
 }
 

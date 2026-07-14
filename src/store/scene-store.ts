@@ -58,6 +58,8 @@ export interface SceneObjectFile {
     angle: number;
     strobeRate: number;
     mount: string;
+    /** 벽/바닥 표면 이미지(data URL) — 옵션 */
+    imageUrl?: string;
   };
 }
 
@@ -70,6 +72,8 @@ export interface SceneFile {
     backgroundColor: [number, number, number];
     brightness: number;
     sunPosition: Vec3;
+    /** 배경 이미지(data URL). 있으면 배경색 대신 이미지 표시 */
+    backgroundImage?: string | null;
   };
   objects: SceneObjectFile[];
   /** v2+: 그룹/룩/페이더 할당/그랜드마스터. v1 파일엔 없음(불러오기 시 빈 콘솔로 초기화). */
@@ -131,6 +135,8 @@ export interface FixtureRuntime {
   tilt: number; // 0..270 도
   angle: number; // 빔 전체각(도) — movingHead 5..60, par(미니빔) 1..12
   strobeRate: number; // 스트로브 플래시 속도(Hz), 0 = 상시 점등
+  /** 벽/바닥 표면에 입히는 이미지(data URL). 없으면 color만 사용 */
+  imageUrl?: string;
 }
 
 type Editable = Pick<
@@ -168,6 +174,8 @@ interface SceneState {
   lightPosition: Vec3;
   /** Scene 배경색 [R,G,B] (0~255) */
   backgroundColor: [number, number, number];
+  /** Scene 배경 이미지(data URL). 있으면 배경색 대신 표시 · null=없음 */
+  backgroundImage: string | null;
 
   // ─── 콘솔: 그룹/룩/페이더 (faderSlots는 assignment 외 level·flashHeld 포함 — 라이브 상태) ───
   /** 전체 페이더 슬롯(FADERS_PER_PAGE 배수 = 페이지×10). 페이지 무관하게 모두 출력에 기여 */
@@ -193,6 +201,10 @@ interface SceneState {
   setSceneBrightness: (v: number) => void;
   setLightPosition: (axis: 0 | 1 | 2, value: number) => void;
   setBackgroundChannel: (channel: 0 | 1 | 2, value: number) => void;
+  /** 배경 이미지 설정(data URL) · null=제거 */
+  setBackgroundImage: (url: string | null) => void;
+  /** 벽/바닥 표면 이미지 설정(data URL) · null=제거 */
+  setFixtureImage: (ids: string[], url: string | null) => void;
 
   // 내보내기/불러오기 (JSON)
   exportScene: () => SceneFile;
@@ -819,6 +831,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   sceneBrightness: 0.5,
   lightPosition: [5, 10, 7],
   backgroundColor: [13, 13, 13], // #0d0d0d
+  backgroundImage: null,
   groups: [],
   looks: [],
   faderSlots: defaultFaderSlots(),
@@ -849,6 +862,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       return { backgroundColor: c };
     }),
 
+  setBackgroundImage: (url) => set({ backgroundImage: url || null }),
+
   // ─── 내보내기/불러오기 ───
   exportScene: (): SceneFile => {
     const s = get();
@@ -873,6 +888,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           angle: f.angle,
           strobeRate: f.strobeRate,
           mount: f.mount,
+          ...(f.imageUrl ? { imageUrl: f.imageUrl } : {}),
         },
       }));
     return {
@@ -884,6 +900,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         backgroundColor: [...s.backgroundColor] as [number, number, number],
         brightness: s.sceneBrightness,
         sunPosition: [...s.lightPosition] as Vec3,
+        backgroundImage: s.backgroundImage,
       },
       objects,
       console: {
@@ -964,6 +981,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           tilt: num(p.tilt, 135),
           angle: num(p.angle, defaultAngle(o.objectType)),
           strobeRate: num(p.strobeRate, 8),
+          ...(typeof p.imageUrl === "string" && p.imageUrl ? { imageUrl: p.imageUrl } : {}),
         };
         order.push(id);
       }
@@ -1008,6 +1026,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         Array.isArray(bg) && bg.length === 3
           ? [num(bg[0], 13), num(bg[1], 13), num(bg[2], 13)]
           : [13, 13, 13],
+      backgroundImage: typeof sc.backgroundImage === "string" && sc.backgroundImage ? sc.backgroundImage : null,
       groups,
       looks,
       faderSlots,
@@ -1195,6 +1214,16 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           : { ...changes };
       let fx = s.fixtures;
       for (const id of ids) fx = patch(fx, id, c);
+      return { ...hist, fixtures: fx };
+    }),
+
+  setFixtureImage: (ids, url) =>
+    set((s) => {
+      if (ids.length === 0) return {};
+      const hist = record(s, null);
+      const val = url || undefined; // null/빈문자 → 필드 제거(undefined)
+      let fx = s.fixtures;
+      for (const id of ids) fx = patch(fx, id, { imageUrl: val });
       return { ...hist, fixtures: fx };
     }),
 

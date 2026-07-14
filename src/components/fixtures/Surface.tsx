@@ -6,23 +6,39 @@
 
 import * as THREE from "three";
 import { SURFACE_SIZE } from "../../config/fixtures.config";
+import { useImageTexture } from "../useImageTexture";
 
 interface Props {
   type: "wall" | "floor";
   color: string;
+  imageUrl?: string;
 }
 
-export function Surface({ type, color }: Props) {
+export function Surface({ type, color, imageUrl }: Props) {
   const [w, h] = SURFACE_SIZE[type];
+  const tex = useImageTexture(imageUrl);
   return (
     <mesh receiveShadow>
       <planeGeometry args={[w, h]} />
-      <meshStandardMaterial
-        color={color}
-        roughness={0.35}
-        metalness={0.15}
-        side={THREE.DoubleSide}
-      />
+      {/* 이미지가 있으면 텍스처, 없으면 단색. key로 재료를 갈아끼워 map 토글 시 잔상 방지 */}
+      {tex ? (
+        <meshStandardMaterial
+          key="img"
+          map={tex}
+          color="#ffffff"
+          roughness={0.55}
+          metalness={0.05}
+          side={THREE.DoubleSide}
+        />
+      ) : (
+        <meshStandardMaterial
+          key="plain"
+          color={color}
+          roughness={0.35}
+          metalness={0.15}
+          side={THREE.DoubleSide}
+        />
+      )}
     </mesh>
   );
 }

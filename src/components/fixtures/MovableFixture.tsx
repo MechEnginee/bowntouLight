@@ -78,7 +78,7 @@ export function MovableFixture({ id }: { id: string }) {
       break;
     case "wall":
     case "floor":
-      visual = <Surface type={f.type} color={f.color} />;
+      visual = <Surface type={f.type} color={f.color} imageUrl={f.imageUrl} />;
       break;
     case "light":
       visual = <SceneLight on={litOn} dimmer={effectiveDimmer} color={f.color} />;

@@ -6,6 +6,8 @@ import * as THREE from "three";
 import { useSceneStore, type Vec3 } from "../../store/scene-store";
 import { NumberField } from "./NumberField";
 import { RgbRow } from "./RgbRow";
+import { ColorPalette } from "./ColorPalette";
+import { ImagePicker } from "./ImagePicker";
 import { EyeDropperButton } from "./EyeDropperButton";
 import { hexToRgb, rgbToHex } from "./color-utils";
 
@@ -127,6 +129,7 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
   const selectedIds = useSceneStore((s) => s.selectedIds);
   const anchorId = useSceneStore((s) => s.anchorId);
   const update = useSceneStore((s) => s.update);
+  const setFixtureImage = useSceneStore((s) => s.setFixtureImage);
 
   const panelStyle: React.CSSProperties = {
     width,
@@ -314,15 +317,21 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
                   : "색상 (Color)"}
           </div>
           {useRgbColor ? (
-            <RgbRow
-              value={hexToRgb(primary.color)}
-              onChange={(ch, v) => {
-                const rgb = hexToRgb(primary.color);
-                rgb[ch] = v;
-                update(selectedIds, { color: rgbToHex(rgb) });
-              }}
-              onPickAll={(rgb) => update(selectedIds, { color: rgbToHex(rgb) })}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <ColorPalette
+                value={primary.color}
+                onPick={(hex) => update(selectedIds, { color: hex })}
+              />
+              <RgbRow
+                value={hexToRgb(primary.color)}
+                onChange={(ch, v) => {
+                  const rgb = hexToRgb(primary.color);
+                  rgb[ch] = v;
+                  update(selectedIds, { color: rgbToHex(rgb) });
+                }}
+                onPickAll={(rgb) => update(selectedIds, { color: rgbToHex(rgb) })}
+              />
+            </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <input
@@ -349,11 +358,24 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
       )}
 
       {isSurface && (
-        <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 10 }}>
-          벽/바닥은 목록에서 선택 후 기즈모로
-          <br />
-          이동(1)·회전(2)·크기(3) 조절합니다.
-        </div>
+        <>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "#b0b0c0", marginBottom: 6 }}>표면 이미지</div>
+            <ImagePicker
+              value={primary.imageUrl ?? null}
+              onChange={(url) => setFixtureImage(selectedIds, url)}
+              label="이미지"
+            />
+            <div style={{ fontSize: 10.5, color: "#666", marginTop: 5, lineHeight: 1.5 }}>
+              이미지를 넣으면 표면색 대신 이미지가 벽/바닥에 입혀집니다.
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: "#666", lineHeight: 1.6, marginBottom: 10 }}>
+            벽/바닥은 목록에서 선택 후 기즈모로
+            <br />
+            이동(1)·회전(2)·크기(3) 조절합니다.
+          </div>
+        </>
       )}
 
       {/* Position/Rotation/Scale — 기즈모(1/2/3)와 동일한 값을 숫자로 직접 입력/수정 */}
