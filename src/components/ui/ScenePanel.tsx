@@ -33,6 +33,10 @@ export function ScenePanel() {
   const setBackgroundChannel = useSceneStore((s) => s.setBackgroundChannel);
   const backgroundImage = useSceneStore((s) => s.backgroundImage);
   const setBackgroundImage = useSceneStore((s) => s.setBackgroundImage);
+  const beamGlow = useSceneStore((s) => s.beamGlow);
+  const setBeamGlow = useSceneStore((s) => s.setBeamGlow);
+  const showGrid = useSceneStore((s) => s.showGrid);
+  const setShowGrid = useSceneStore((s) => s.setShowGrid);
 
   const [pos, setPos] = useState({ x: 12, y: 52 }); // 좌상단 3D 뷰 컨트롤 버튼 아래로
   const [collapsed, setCollapsed] = useState(false);
@@ -235,6 +239,69 @@ export function ScenePanel() {
             onChange={(e) => setSceneBrightness(parseFloat(e.target.value) / 100)}
             style={{ width: "100%", accentColor: "#4A90D9" }}
           />
+
+          {/* 빔 글로우 — 반짝이는 볼류메트릭 빛 세기 */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 8,
+              marginBottom: 5,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>빔 글로우</span>
+            <NumberField
+              value={beamGlow * 100}
+              onCommit={(v) => setBeamGlow(Math.max(0, Math.min(200, v)) / 100)}
+              suffix="%"
+              decimals={0}
+              width={48}
+              align="right"
+            />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={200}
+            value={beamGlow * 100}
+            onChange={(e) => setBeamGlow(parseFloat(e.target.value) / 100)}
+            style={{ width: "100%", accentColor: "#4A90D9" }}
+          />
+          <div style={{ fontSize: 10.5, color: "#666", marginTop: 3, lineHeight: 1.5 }}>
+            빔의 반짝이는 발광 세기 (0%=글로우 끄기)
+          </div>
+
+          {/* 격자 그리드 표시 토글 */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>격자 그리드</span>
+            <button
+              onClick={() => setShowGrid(!showGrid)}
+              style={{
+                border: "1px solid #3a5a8c",
+                borderRadius: 4,
+                padding: "3px 12px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                background: showGrid ? "#3f6bb0" : "#2a2a32",
+                color: showGrid ? "#fff" : "#9a9aa6",
+              }}
+            >
+              {showGrid ? "표시" : "숨김"}
+            </button>
+          </div>
 
           {/* 태양광 위치 */}
           <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #2a2a40" }}>

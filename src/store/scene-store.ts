@@ -74,6 +74,10 @@ export interface SceneFile {
     sunPosition: Vec3;
     /** 배경 이미지(data URL). 있으면 배경색 대신 이미지 표시 */
     backgroundImage?: string | null;
+    /** 빔 글로우 세기 0..2 (부재=1) */
+    beamGlow?: number;
+    /** 바닥 격자 그리드 표시 (부재=true) */
+    showGrid?: boolean;
   };
   objects: SceneObjectFile[];
   /** v2+: 그룹/룩/페이더 할당/그랜드마스터. v1 파일엔 없음(불러오기 시 빈 콘솔로 초기화). */
@@ -176,6 +180,10 @@ interface SceneState {
   backgroundColor: [number, number, number];
   /** Scene 배경 이미지(data URL). 있으면 배경색 대신 표시 · null=없음 */
   backgroundImage: string | null;
+  /** 빔 글로우(반짝이는 볼류메트릭 빛) 세기 배율 0..2 · 1=기본 · 0=끄기 */
+  beamGlow: number;
+  /** 바닥 격자 그리드 표시 여부 */
+  showGrid: boolean;
 
   // ─── 콘솔: 그룹/룩/페이더 (faderSlots는 assignment 외 level·flashHeld 포함 — 라이브 상태) ───
   /** 전체 페이더 슬롯(FADERS_PER_PAGE 배수 = 페이지×10). 페이지 무관하게 모두 출력에 기여 */
@@ -201,6 +209,10 @@ interface SceneState {
   setSceneBrightness: (v: number) => void;
   setLightPosition: (axis: 0 | 1 | 2, value: number) => void;
   setBackgroundChannel: (channel: 0 | 1 | 2, value: number) => void;
+  /** 빔 글로우 세기(0..2) */
+  setBeamGlow: (v: number) => void;
+  /** 바닥 격자 그리드 표시 토글 */
+  setShowGrid: (on: boolean) => void;
   /** 배경 이미지 설정(data URL) · null=제거 */
   setBackgroundImage: (url: string | null) => void;
   /** 벽/바닥 표면 이미지 설정(data URL) · null=제거 */
@@ -832,6 +844,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   lightPosition: [5, 10, 7],
   backgroundColor: [13, 13, 13], // #0d0d0d
   backgroundImage: null,
+  beamGlow: 1,
+  showGrid: true,
   groups: [],
   looks: [],
   faderSlots: defaultFaderSlots(),
@@ -862,6 +876,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       return { backgroundColor: c };
     }),
 
+  setBeamGlow: (v) => set({ beamGlow: Math.max(0, Math.min(2, v)) }),
+  setShowGrid: (on) => set({ showGrid: on }),
   setBackgroundImage: (url) => set({ backgroundImage: url || null }),
 
   // ─── 내보내기/불러오기 ───
@@ -901,6 +917,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         brightness: s.sceneBrightness,
         sunPosition: [...s.lightPosition] as Vec3,
         backgroundImage: s.backgroundImage,
+        beamGlow: s.beamGlow,
+        showGrid: s.showGrid,
       },
       objects,
       console: {
@@ -1027,6 +1045,8 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           ? [num(bg[0], 13), num(bg[1], 13), num(bg[2], 13)]
           : [13, 13, 13],
       backgroundImage: typeof sc.backgroundImage === "string" && sc.backgroundImage ? sc.backgroundImage : null,
+      beamGlow: typeof sc.beamGlow === "number" && Number.isFinite(sc.beamGlow) ? clamp(sc.beamGlow, 0, 2) : 1,
+      showGrid: typeof sc.showGrid === "boolean" ? sc.showGrid : true,
       groups,
       looks,
       faderSlots,

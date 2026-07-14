@@ -69,6 +69,22 @@ function SceneBackground() {
   return <color attach="background" args={[r / 255, g / 255, b / 255]} />;
 }
 
+/** 바닥 격자 그리드 — 스토어 showGrid로 표시 토글. */
+function SceneGrid() {
+  const showGrid = useSceneStore((s) => s.showGrid);
+  if (!showGrid) return null;
+  return (
+    <Grid
+      args={[20, 20]}
+      cellColor="#222"
+      sectionColor="#4A90D9"
+      sectionThickness={1}
+      fadeDistance={30}
+      position={[0, 0.01, 0]}
+    />
+  );
+}
+
 /** 개발자 통계 프로브 — Canvas 내부에서 FPS·총 폴리곤 수를 0.25초마다 샘플링해 콜백.
  * 폴리곤은 씬 그래프를 순회해 전체 삼각형 수를 직접 합산(렌더러 통계에 의존하지 않음). */
 function StatsProbe({ onSample }: { onSample: (fps: number, tris: number) => void }) {
@@ -435,14 +451,7 @@ export default function App() {
           <FixtureGroup />
           <SelectionControls tcRef={tcRef} />
 
-          <Grid
-            args={[20, 20]}
-            cellColor="#222"
-            sectionColor="#4A90D9"
-            sectionThickness={1}
-            fadeDistance={30}
-            position={[0, 0.01, 0]}
-          />
+          <SceneGrid />
 
           <OrbitControls
             makeDefault
