@@ -60,6 +60,8 @@ export interface SceneObjectFile {
     mount: string;
     /** 벽/바닥 표면 이미지(data URL) — 옵션 */
     imageUrl?: string;
+    /** 표면 거칠기 0..1 — 옵션 */
+    roughness?: number;
   };
 }
 
@@ -141,11 +143,13 @@ export interface FixtureRuntime {
   strobeRate: number; // 스트로브 플래시 속도(Hz), 0 = 상시 점등
   /** 벽/바닥 표면에 입히는 이미지(data URL). 없으면 color만 사용 */
   imageUrl?: string;
+  /** 표면 거칠기 0..1 (낮을수록 광택/반사↑). 부재 시 타입별 기본값 사용 */
+  roughness?: number;
 }
 
 type Editable = Pick<
   FixtureRuntime,
-  "on" | "dimmer" | "color" | "pan" | "tilt" | "angle" | "strobeRate"
+  "on" | "dimmer" | "color" | "pan" | "tilt" | "angle" | "strobeRate" | "roughness"
 >;
 
 interface Snapshot {
@@ -261,6 +265,8 @@ interface SceneState {
   renameObject: (id: string, name: string) => void;
   copySelection: () => void;
   paste: () => void;
+  /** 선택 오브젝트를 제자리에 복제하고 복제본을 선택 (기즈모 Ctrl+Shift 드래그 복제용) */
+  duplicateSelection: () => void;
 
   // ─── 콘솔: 그룹 ───
   createGroup: (name?: string) => void;
@@ -915,6 +921,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           strobeRate: f.strobeRate,
           mount: f.mount,
           ...(f.imageUrl ? { imageUrl: f.imageUrl } : {}),
+          ...(f.roughness !== undefined ? { roughness: f.roughness } : {}),
         },
       }));
     return {
@@ -1010,6 +1017,9 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           angle: num(p.angle, defaultAngle(o.objectType)),
           strobeRate: num(p.strobeRate, 8),
           ...(typeof p.imageUrl === "string" && p.imageUrl ? { imageUrl: p.imageUrl } : {}),
+          ...(typeof p.roughness === "number" && Number.isFinite(p.roughness)
+            ? { roughness: clamp01(p.roughness) }
+            : {}),
         };
         order.push(id);
       }
@@ -1368,7 +1378,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
           ...src,
           id,
           name,
-          position: [src.position[0] + 0.5, src.position[1], src.position[2] + 0.5],
+          position: [...src.position] as Vec3, // 원본과 동일 위치에 붙여넣기
           mount: "복사됨",
         };
         order.push(id);
@@ -1381,6 +1391,36 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         selectedIds: newIds,
         anchorId: newIds[0] ?? null,
       };
+    }),
+
+  duplicateSelection: () =>
+    set((s) => {
+      if (s.selectedIds.length === 0) return {};
+      const hist = record(s, null);
+      const fx = { ...s.fixtures };
+      const order = [...s.order];
+      const newIds: string[] = [];
+      for (const srcId of s.selectedIds) {
+        const src = s.fixtures[srcId];
+        if (!src) continue;
+        const id = genId();
+        const name = nextName(
+          src.type,
+          order.map((oid) => fx[oid]?.name ?? ""),
+        );
+        fx[id] = {
+          ...src,
+          id,
+          name,
+          position: [...src.position] as Vec3, // 제자리 복제 — 이후 기즈모 델타가 복제본을 이동
+          rotation: [...src.rotation] as Vec3,
+          scale: [...src.scale] as Vec3,
+        };
+        order.push(id);
+        newIds.push(id);
+      }
+      if (newIds.length === 0) return {};
+      return { ...hist, fixtures: fx, order, selectedIds: newIds, anchorId: newIds[0] };
     }),
 
   // ─── 콘솔: 그룹 ───

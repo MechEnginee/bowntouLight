@@ -23,6 +23,23 @@ export function SelectionControls({
   const lastPos = useRef(new THREE.Vector3());
   const lastQuat = useRef(new THREE.Quaternion());
   const lastScale = useRef(new THREE.Vector3(1, 1, 1));
+  // 직전 포인터다운의 Ctrl(⌘)+Shift 여부 — 기즈모 잡는 순간의 복제 판정용
+  const dupArmed = useRef(false);
+
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      dupArmed.current = (e.ctrlKey || e.metaKey) && e.shiftKey;
+    };
+    window.addEventListener("pointerdown", onDown, true); // 캡처 단계 — 기즈모보다 먼저
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, []);
+
+  // 기즈모 드래그 시작: Ctrl+Shift면 제자리 복제 후 복제본을 선택 → 이어지는 드래그가 복제본을 옮김
+  const onGizmoDown = () => {
+    if (dupArmed.current && selectedIds.length > 0) {
+      useSceneStore.getState().duplicateSelection();
+    }
+  };
 
   // 선택/모드 변경 시 피벗을 중심점으로 재배치하고 회전·스케일 초기화
   useEffect(() => {
@@ -90,6 +107,7 @@ export function SelectionControls({
           object={pivotRef.current}
           mode={mode}
           size={0.8}
+          onMouseDown={onGizmoDown}
           onObjectChange={handleChange}
         />
       )}

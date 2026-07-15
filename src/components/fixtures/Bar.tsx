@@ -6,6 +6,7 @@
 
 interface Props {
   color: string;
+  roughness?: number;
 }
 
 export const BAR_WIDTH = 10; // 기본 가로 폭
@@ -13,8 +14,8 @@ export const BAR_HEIGHT = 4.7; // 기본 높이
 const T = 0.2; // 빔 두께
 const LEG = 0.16; // 기둥 두께
 
-export function Bar({ color }: Props) {
-  const mat = { color, metalness: 0.6, roughness: 0.45 };
+export function Bar({ color, roughness }: Props) {
+  const mat = { color, metalness: 0.6, roughness: roughness ?? 0.45 };
   const halfW = BAR_WIDTH / 2;
   const halfH = BAR_HEIGHT / 2;
   return (
