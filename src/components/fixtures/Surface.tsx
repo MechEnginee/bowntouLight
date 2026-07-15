@@ -12,9 +12,10 @@ interface Props {
   type: "wall" | "floor";
   color: string;
   imageUrl?: string;
+  roughness?: number;
 }
 
-export function Surface({ type, color, imageUrl }: Props) {
+export function Surface({ type, color, imageUrl, roughness }: Props) {
   const [w, h] = SURFACE_SIZE[type];
   const tex = useImageTexture(imageUrl);
   return (
@@ -26,7 +27,7 @@ export function Surface({ type, color, imageUrl }: Props) {
           key="img"
           map={tex}
           color="#ffffff"
-          roughness={0.55}
+          roughness={roughness ?? 0.55}
           metalness={0.05}
           side={THREE.DoubleSide}
         />
@@ -34,7 +35,7 @@ export function Surface({ type, color, imageUrl }: Props) {
         <meshStandardMaterial
           key="plain"
           color={color}
-          roughness={0.35}
+          roughness={roughness ?? 0.35}
           metalness={0.15}
           side={THREE.DoubleSide}
         />

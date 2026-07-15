@@ -20,6 +20,7 @@ function Slider({
   suffix,
   decimals = 0,
   onChange,
+  wheelStep,
 }: {
   label: string;
   value: number;
@@ -29,11 +30,20 @@ function Slider({
   suffix?: string;
   decimals?: number;
   onChange: (v: number) => void;
+  /** 지정 시 이 행 위에서 마우스 휠로 값을 이 폭만큼 증감 */
+  wheelStep?: number;
 }) {
   // 슬라이더로 나온 값이 범위를 벗어나지 않도록 입력 커밋 시 clamp
   const commit = (v: number) => onChange(Math.max(min, Math.min(max, v)));
+  const onWheel =
+    wheelStep === undefined
+      ? undefined
+      : (e: React.WheelEvent) => {
+          e.stopPropagation();
+          commit(value + (e.deltaY < 0 ? wheelStep : -wheelStep));
+        };
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom: 14 }} onWheel={onWheel}>
       <div
         style={{
           display: "flex",
@@ -365,6 +375,18 @@ export function ControlPanel({ width = 260 }: { width?: number }) {
             </div>
           )}
         </div>
+      )}
+
+      {isStructural && (
+        <Slider
+          label="광택 (Glossy) · 스크롤"
+          value={Math.round((1 - (primary.roughness ?? 0.5)) * 100)}
+          min={0}
+          max={100}
+          suffix="%"
+          wheelStep={5}
+          onChange={(pct) => update(selectedIds, { roughness: Math.max(0, Math.min(1, 1 - pct / 100)) })}
+        />
       )}
 
       {isImageable && (

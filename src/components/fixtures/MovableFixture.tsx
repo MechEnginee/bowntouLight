@@ -79,18 +79,18 @@ export function MovableFixture({ id }: { id: string }) {
       break;
     case "wall":
     case "floor":
-      visual = <Surface type={f.type} color={f.color} imageUrl={f.imageUrl} />;
+      visual = <Surface type={f.type} color={f.color} imageUrl={f.imageUrl} roughness={f.roughness} />;
       break;
     case "light":
       visual = <SceneLight on={litOn} dimmer={effectiveDimmer} color={f.color} />;
       break;
     case "bar":
-      visual = <Bar color={f.color} />;
+      visual = <Bar color={f.color} roughness={f.roughness} />;
       break;
     case "cube":
     case "cylinder":
     case "sphere":
-      visual = <Primitive kind={f.type} color={f.color} imageUrl={f.imageUrl} />;
+      visual = <Primitive kind={f.type} color={f.color} imageUrl={f.imageUrl} roughness={f.roughness} />;
       break;
   }
 

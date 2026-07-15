@@ -10,9 +10,10 @@ interface Props {
   kind: PrimitiveType;
   color: string;
   imageUrl?: string;
+  roughness?: number;
 }
 
-export function Primitive({ kind, color, imageUrl }: Props) {
+export function Primitive({ kind, color, imageUrl, roughness }: Props) {
   const tex = useImageTexture(imageUrl);
   return (
     <mesh castShadow receiveShadow>
@@ -20,9 +21,9 @@ export function Primitive({ kind, color, imageUrl }: Props) {
       {kind === "cylinder" && <cylinderGeometry args={[0.5, 0.5, 1.5, 40]} />}
       {kind === "sphere" && <sphereGeometry args={[0.6, 40, 28]} />}
       {tex ? (
-        <meshStandardMaterial key="img" map={tex} color="#ffffff" roughness={0.55} metalness={0.1} />
+        <meshStandardMaterial key="img" map={tex} color="#ffffff" roughness={roughness ?? 0.55} metalness={0.1} />
       ) : (
-        <meshStandardMaterial key="plain" color={color} roughness={0.45} metalness={0.15} side={THREE.FrontSide} />
+        <meshStandardMaterial key="plain" color={color} roughness={roughness ?? 0.45} metalness={0.15} side={THREE.FrontSide} />
       )}
     </mesh>
   );
