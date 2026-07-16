@@ -38,6 +38,8 @@ export function ScenePanel() {
   const setBeamGlow = useSceneStore((s) => s.setBeamGlow);
   const showGrid = useSceneStore((s) => s.showGrid);
   const setShowGrid = useSceneStore((s) => s.setShowGrid);
+  const pointLightShadows = useSceneStore((s) => s.pointLightShadows);
+  const setPointLightShadows = useSceneStore((s) => s.setPointLightShadows);
 
   const [pos, setPos] = useState({ x: 12, y: 52 }); // 좌상단 3D 뷰 컨트롤 버튼 아래로
   const [collapsed, setCollapsed] = useState(false);
@@ -346,6 +348,39 @@ export function ScenePanel() {
             >
               {showGrid ? "표시" : "숨김"}
             </button>
+          </div>
+
+          {/* 광원 그림자(성능) 토글 */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>광원 그림자</span>
+            <button
+              onClick={() => setPointLightShadows(!pointLightShadows)}
+              title="광원 오브젝트의 큐브 섀도우. 끄면 광원 복사·다수 배치가 훨씬 가벼워집니다."
+              style={{
+                border: "1px solid #3a5a8c",
+                borderRadius: 4,
+                padding: "3px 12px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                background: pointLightShadows ? "#3f6bb0" : "#2a2a32",
+                color: pointLightShadows ? "#fff" : "#9a9aa6",
+              }}
+            >
+              {pointLightShadows ? "켬" : "끔"}
+            </button>
+          </div>
+          <div style={{ fontSize: 10.5, color: "#666", marginTop: 3, lineHeight: 1.5 }}>
+            끄면 광원 복사·다수 배치가 가벼워집니다(그림자는 태양광이 담당)
           </div>
 
           {/* 태양광 위치 */}
