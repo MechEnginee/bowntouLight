@@ -80,8 +80,8 @@ export interface SceneFile {
     beamGlow?: number;
     /** 바닥 격자 그리드 표시 (부재=true) */
     showGrid?: boolean;
-    /** 광원 큐브 섀도우 (부재=false) */
-    pointLightShadows?: boolean;
+    /** 전역 그림자 렌더링 (부재=false) */
+    shadowsEnabled?: boolean;
   };
   objects: SceneObjectFile[];
   /** v2+: 그룹/룩/페이더 할당/그랜드마스터. v1 파일엔 없음(불러오기 시 빈 콘솔로 초기화). */
@@ -190,8 +190,8 @@ interface SceneState {
   beamGlow: number;
   /** 바닥 격자 그리드 표시 여부 */
   showGrid: boolean;
-  /** 광원 오브젝트의 큐브 섀도우 사용 여부(성능 큼 · 기본 off) */
-  pointLightShadows: boolean;
+  /** 전역 그림자 렌더링 on/off (렌더러 shadowMap.enabled) · 성능 큼 · 기본 off */
+  shadowsEnabled: boolean;
 
   // ─── 콘솔: 그룹/룩/페이더 (faderSlots는 assignment 외 level·flashHeld 포함 — 라이브 상태) ───
   /** 전체 페이더 슬롯(FADERS_PER_PAGE 배수 = 페이지×10). 페이지 무관하게 모두 출력에 기여 */
@@ -221,8 +221,8 @@ interface SceneState {
   setBeamGlow: (v: number) => void;
   /** 바닥 격자 그리드 표시 토글 */
   setShowGrid: (on: boolean) => void;
-  /** 광원 큐브 섀도우 토글 */
-  setPointLightShadows: (on: boolean) => void;
+  /** 전역 그림자 렌더링 토글 */
+  setShadowsEnabled: (on: boolean) => void;
   /** 배경 이미지 설정(data URL) · null=제거 */
   setBackgroundImage: (url: string | null) => void;
   /** 벽/바닥 표면 이미지 설정(data URL) · null=제거 */
@@ -868,7 +868,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
   backgroundImage: null,
   beamGlow: 1,
   showGrid: true,
-  pointLightShadows: false,
+  shadowsEnabled: false,
   groups: [],
   looks: [],
   faderSlots: defaultFaderSlots(),
@@ -901,7 +901,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
 
   setBeamGlow: (v) => set({ beamGlow: Math.max(0, Math.min(2, v)) }),
   setShowGrid: (on) => set({ showGrid: on }),
-  setPointLightShadows: (on) => set({ pointLightShadows: on }),
+  setShadowsEnabled: (on) => set({ shadowsEnabled: on }),
   setBackgroundImage: (url) => set({ backgroundImage: url || null }),
 
   // ─── 내보내기/불러오기 ───
@@ -944,7 +944,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
         backgroundImage: s.backgroundImage,
         beamGlow: s.beamGlow,
         showGrid: s.showGrid,
-        pointLightShadows: s.pointLightShadows,
+        shadowsEnabled: s.shadowsEnabled,
       },
       objects,
       console: {
@@ -1076,7 +1076,7 @@ export const useSceneStore = create<SceneState>()((set, get) => ({
       backgroundImage: typeof sc.backgroundImage === "string" && sc.backgroundImage ? sc.backgroundImage : null,
       beamGlow: typeof sc.beamGlow === "number" && Number.isFinite(sc.beamGlow) ? clamp(sc.beamGlow, 0, 2) : 1,
       showGrid: typeof sc.showGrid === "boolean" ? sc.showGrid : true,
-      pointLightShadows: sc.pointLightShadows === true,
+      shadowsEnabled: sc.shadowsEnabled === true,
       groups,
       looks,
       faderSlots,

@@ -38,8 +38,8 @@ export function ScenePanel() {
   const setBeamGlow = useSceneStore((s) => s.setBeamGlow);
   const showGrid = useSceneStore((s) => s.showGrid);
   const setShowGrid = useSceneStore((s) => s.setShowGrid);
-  const pointLightShadows = useSceneStore((s) => s.pointLightShadows);
-  const setPointLightShadows = useSceneStore((s) => s.setPointLightShadows);
+  const shadowsEnabled = useSceneStore((s) => s.shadowsEnabled);
+  const setShadowsEnabled = useSceneStore((s) => s.setShadowsEnabled);
 
   const [pos, setPos] = useState({ x: 12, y: 52 }); // 좌상단 3D 뷰 컨트롤 버튼 아래로
   const [collapsed, setCollapsed] = useState(false);
@@ -350,7 +350,7 @@ export function ScenePanel() {
             </button>
           </div>
 
-          {/* 광원 그림자(성능) 토글 */}
+          {/* 그림자 렌더링(성능) 마스터 토글 — 기본 끔, 작업 후 켜서 확인 */}
           <div
             style={{
               display: "flex",
@@ -361,10 +361,10 @@ export function ScenePanel() {
               borderTop: "1px solid #2a2a40",
             }}
           >
-            <span style={{ color: "#4A90D9", fontWeight: 700 }}>광원 그림자</span>
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>그림자 (Shadow)</span>
             <button
-              onClick={() => setPointLightShadows(!pointLightShadows)}
-              title="광원 오브젝트의 큐브 섀도우. 끄면 광원 복사·다수 배치가 훨씬 가벼워집니다."
+              onClick={() => setShadowsEnabled(!shadowsEnabled)}
+              title="전역 그림자 렌더링. 작업 중엔 꺼서 가볍게, 완료 후 켜서 그림자를 확인하세요."
               style={{
                 border: "1px solid #3a5a8c",
                 borderRadius: 4,
@@ -372,15 +372,15 @@ export function ScenePanel() {
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: "pointer",
-                background: pointLightShadows ? "#3f6bb0" : "#2a2a32",
-                color: pointLightShadows ? "#fff" : "#9a9aa6",
+                background: shadowsEnabled ? "#3f6bb0" : "#2a2a32",
+                color: shadowsEnabled ? "#fff" : "#9a9aa6",
               }}
             >
-              {pointLightShadows ? "켬" : "끔"}
+              {shadowsEnabled ? "켬" : "끔"}
             </button>
           </div>
           <div style={{ fontSize: 10.5, color: "#666", marginTop: 3, lineHeight: 1.5 }}>
-            끄면 광원 복사·다수 배치가 가벼워집니다(그림자는 태양광이 담당)
+            작업 중엔 꺼서 가볍게 · 완료 후 켜면 그림자가 제대로 보입니다
           </div>
 
           {/* 태양광 위치 */}

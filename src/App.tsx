@@ -6,7 +6,7 @@
 //         Ctrl+C/V=복사/붙여넣기 · Delete=삭제 · Ctrl+Z=실행취소 · Ctrl+Shift+Z 또는 Ctrl+Y=다시실행
 
 import { useEffect, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { RootState } from "@react-three/fiber";
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import * as THREE from "three";
@@ -68,6 +68,26 @@ function SceneBackground() {
   const tex = useImageTexture(bgImage);
   if (bgImage && tex) return <primitive attach="background" object={tex} />;
   return <color attach="background" args={[r / 255, g / 255, b / 255]} />;
+}
+
+/** 전역 그림자 렌더링 스위치 — 렌더러 shadowMap.enabled를 스토어 shadowsEnabled에 연동.
+ * 꺼짐(기본)=모든 그림자 패스 생략(가장 가벼움). 토글 시 머티리얼을 재컴파일해 즉시 반영. */
+function ShadowManager() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const enabled = useSceneStore((s) => s.shadowsEnabled);
+  useEffect(() => {
+    gl.shadowMap.enabled = enabled;
+    gl.shadowMap.needsUpdate = true;
+    // 그림자 코드 유무가 바뀌므로 모든 머티리얼을 재컴파일하도록 표시
+    scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      const m = mesh.material;
+      if (!m) return;
+      (Array.isArray(m) ? m : [m]).forEach((mm) => (mm.needsUpdate = true));
+    });
+  }, [enabled, gl, scene]);
+  return null;
 }
 
 /** 바닥 격자 그리드 — 스토어 showGrid로 표시 토글. */
@@ -443,6 +463,7 @@ export default function App() {
           onCreated={(state) => (r3f.current = state)}
         >
           <SceneBackground />
+          <ShadowManager />
           <SceneLights />
           {showStats && (
             <StatsProbe onSample={(fps, tris) => setStats({ fps, tris })} />
