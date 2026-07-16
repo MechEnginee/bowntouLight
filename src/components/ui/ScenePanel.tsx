@@ -38,6 +38,8 @@ export function ScenePanel() {
   const setBeamGlow = useSceneStore((s) => s.setBeamGlow);
   const showGrid = useSceneStore((s) => s.showGrid);
   const setShowGrid = useSceneStore((s) => s.setShowGrid);
+  const shadowsEnabled = useSceneStore((s) => s.shadowsEnabled);
+  const setShadowsEnabled = useSceneStore((s) => s.setShadowsEnabled);
 
   const [pos, setPos] = useState({ x: 12, y: 52 }); // 좌상단 3D 뷰 컨트롤 버튼 아래로
   const [collapsed, setCollapsed] = useState(false);
@@ -346,6 +348,39 @@ export function ScenePanel() {
             >
               {showGrid ? "표시" : "숨김"}
             </button>
+          </div>
+
+          {/* 그림자 렌더링(성능) 마스터 토글 — 기본 끔, 작업 후 켜서 확인 */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px solid #2a2a40",
+            }}
+          >
+            <span style={{ color: "#4A90D9", fontWeight: 700 }}>그림자 (Shadow)</span>
+            <button
+              onClick={() => setShadowsEnabled(!shadowsEnabled)}
+              title="전역 그림자 렌더링. 작업 중엔 꺼서 가볍게, 완료 후 켜서 그림자를 확인하세요."
+              style={{
+                border: "1px solid #3a5a8c",
+                borderRadius: 4,
+                padding: "3px 12px",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: "pointer",
+                background: shadowsEnabled ? "#3f6bb0" : "#2a2a32",
+                color: shadowsEnabled ? "#fff" : "#9a9aa6",
+              }}
+            >
+              {shadowsEnabled ? "켬" : "끔"}
+            </button>
+          </div>
+          <div style={{ fontSize: 10.5, color: "#666", marginTop: 3, lineHeight: 1.5 }}>
+            작업 중엔 꺼서 가볍게 · 완료 후 켜면 그림자가 제대로 보입니다
           </div>
 
           {/* 태양광 위치 */}
