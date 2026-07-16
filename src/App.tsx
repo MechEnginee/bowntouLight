@@ -11,6 +11,7 @@ import type { RootState } from "@react-three/fiber";
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import * as THREE from "three";
 import { Stage } from "./components/scene/Stage";
+import { ScenePointLights } from "./components/scene/ScenePointLights";
 import { FixtureGroup } from "./components/fixtures/FixtureGroup";
 import { SelectionControls } from "./components/scene/SelectionControls";
 import { FixtureList } from "./components/ui/FixtureList";
@@ -465,6 +466,7 @@ export default function App() {
           <SceneBackground />
           <ShadowManager />
           <SceneLights />
+          <ScenePointLights />
           {showStats && (
             <StatsProbe onSample={(fps, tris) => setStats({ fps, tris })} />
           )}
